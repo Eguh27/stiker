@@ -5,6 +5,7 @@ import 'package:sticker_studio/features/data/file_system_manager.dart';
 import 'package:sticker_studio/src/rust/api/errors.dart';
 import 'package:sticker_studio/src/rust/api/resolve.dart';
 
+import 'dart_media_resolver.dart';
 import 'import_error_message.dart';
 import 'import_exception.dart';
 import 'url_import_queue_store.dart';
@@ -64,12 +65,28 @@ class UrlImportRunner {
 
     try {
       await store.markDownloading(entry.id);
-      await _resolver(
-        url: sourceUrl,
-        outputPath: output.path,
-        extractorsManifestPath: extractorsManifestPath,
-      );
-      if (!await output.exists() || await output.length() == 0) {
+      var downloaded = false;
+      try {
+        await _resolver(
+          url: sourceUrl,
+          outputPath: output.path,
+          extractorsManifestPath: extractorsManifestPath,
+        );
+        downloaded = await output.exists() && await output.length() > 0;
+      } on ResolveError {
+        rethrow;
+      } catch (_) {
+        downloaded = false;
+      }
+
+      if (!downloaded) {
+        downloaded = await downloadMediaWithDart(
+          url: sourceUrl,
+          outputPath: output.path,
+        );
+      }
+
+      if (!downloaded || !await output.exists() || await output.length() == 0) {
         throw const ImportException('Gambar tidak ditemukan di tautan');
       }
       await store.markDownloaded(entry.id, output.path);

@@ -27,6 +27,8 @@ internal class HeadlessImportEngine(private val context: Context) {
                 METHOD_FINISHED -> {
                     result.success(null)
                     val success = call.argument<String>(ARG_RESULT) == RESULT_SUCCESS
+                    val message = call.argument<String>("message")
+                    android.util.Log.i("HeadlessImport", "finished: success=$success, message=$message")
                     completion.complete(success)
                 }
                 else -> result.notImplemented()

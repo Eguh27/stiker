@@ -37,7 +37,11 @@ Future<void> backgroundImportMain() async {
       await RegistryBootstrap.ensureExtractorsManifest(
         fileSystemManager: fileSystemManager,
       );
-      await RustLib.init();
+      try {
+        await RustLib.init();
+      } catch (e) {
+        debugPrint('RustLib init error in background: $e');
+      }
 
       final runner = UrlImportRunner(
         store: UrlImportQueueStore(database),

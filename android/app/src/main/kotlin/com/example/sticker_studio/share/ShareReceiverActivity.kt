@@ -41,9 +41,7 @@ class ShareReceiverActivity : Activity() {
 
                 withContext(NonCancellable + Dispatchers.Main) {
                     val toastMessage = when (parseResult) {
-                        is ShareParseResult.Accepted -> {
-                            if (hasUrl) "Link ditambahkan ke antrean stiker" else "Foto ditambahkan ke stiker"
-                        }
+                        is ShareParseResult.Accepted -> "Gambar berhasil ditambahkan pada stiker"
                         is ShareParseResult.Rejected -> parseResult.message
                         ShareParseResult.Ignored -> "Format konten tidak didukung"
                     }
