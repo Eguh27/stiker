@@ -126,6 +126,7 @@ class FakePackRepository implements PackEditorRepository {
     required String packId,
     required String name,
     required String author,
+    List<Sticker>? stickers,
     List<String>? emojiTags,
   }) async {
     await _throwIfUnavailable();
@@ -133,7 +134,14 @@ class FakePackRepository implements PackEditorRepository {
       (StickerPack pack) => pack.id == packId,
     );
     if (index < 0) throw StateError('Pack $packId tidak ada');
-    _packs[index] = _packs[index].copyWith(name: name, author: author);
+    _packs[index] = _packs[index].copyWith(
+      name: name,
+      author: author,
+      stickerCount: stickers?.length ?? _packs[index].stickerCount,
+    );
+    if (stickers != null) {
+      _details[packId] = stickers.toList();
+    }
     if (emojiTags != null) {
       _emojis[packId] = emojiTags.toList();
     }

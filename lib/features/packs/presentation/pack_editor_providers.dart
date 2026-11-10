@@ -139,7 +139,7 @@ class PackEditorNotifier extends Notifier<PackEditorState> {
       if (_packId == null) {
         await repository.createPack(
           name: _saveName(current.pack!),
-          author: current.pack!.author.trim(),
+          author: _saveAuthor(current.pack!),
           stickers: current.stickers,
           emojiTags: current.emojiTags,
         );
@@ -147,14 +147,9 @@ class PackEditorNotifier extends Notifier<PackEditorState> {
         await repository.updatePack(
           packId: _packId,
           name: _saveName(current.pack!),
-          author: current.pack!.author.trim(),
+          author: _saveAuthor(current.pack!),
+          stickers: current.stickers,
           emojiTags: current.emojiTags,
-        );
-        await repository.reorderStickers(
-          packId: _packId,
-          stickerIds: [
-            for (final Sticker sticker in current.stickers) sticker.id,
-          ],
         );
       }
     } on Object {
@@ -169,5 +164,10 @@ class PackEditorNotifier extends Notifier<PackEditorState> {
   String _saveName(StickerPack pack) {
     final String trimmed = pack.name.trim();
     return trimmed.isEmpty ? 'Tanpa nama' : trimmed;
+  }
+
+  String _saveAuthor(StickerPack pack) {
+    final String trimmed = pack.author.trim();
+    return trimmed.isEmpty ? 'Sticker Studio' : trimmed;
   }
 }

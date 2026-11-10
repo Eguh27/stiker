@@ -36,11 +36,12 @@ abstract class PackEditorRepository implements PackRepository {
     List<String> emojiTags = const [],
   });
 
-  /// Simpan metadata pack (nama/pembuat/emoji). Urutan stiker via [reorderStickers].
+  /// Simpan metadata pack (nama/pembuat/emoji) dan stiker.
   Future<void> updatePack({
     required String packId,
     required String name,
     required String author,
+    List<Sticker>? stickers,
     List<String>? emojiTags,
   });
 

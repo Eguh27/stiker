@@ -75,15 +75,21 @@ class DriftPackEditorAdapter implements PackEditorRepository {
     required String packId,
     required String name,
     required String author,
+    List<domain.Sticker>? stickers,
     List<String>? emojiTags,
   }) async {
     final PackDetails existing = await _repository.fetchPack(packId);
+    final List<String> stickerIds = stickers != null
+        ? [for (final s in stickers) s.id]
+        : existing.stickerIds;
+    await _ensureStickersExist(stickerIds);
+    final String trayPath = await _resolveTray(stickerIds);
     await _repository.updatePack(
       id: packId,
       name: name,
-      author: author,
-      trayIconPath: existing.trayIconPath,
-      stickerIds: existing.stickerIds,
+      author: author.trim().isEmpty ? 'Sticker Studio' : author,
+      trayIconPath: trayPath,
+      stickerIds: stickerIds,
       emojis: emojiTags,
       isSynced: existing.isSynced,
     );
