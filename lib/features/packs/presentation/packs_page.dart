@@ -18,7 +18,7 @@ class PacksPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<StickerPack>> packs = ref.watch(packListProvider);
     return Scaffold(
-      appBar: const TopBar(title: 'Sticker Packs'),
+      appBar: const TopBar(title: 'Sticker Packs', showThemeToggle: true),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.s5,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import 'app_icon.dart';
+import 'theme_toggle_button.dart';
 
 /// TopBar dari screen-map: eyebrow + title + back/action, tinggi 96.
 class TopBar extends StatelessWidget implements PreferredSizeWidget {
@@ -13,6 +14,7 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
     this.onBack,
     this.leading,
     this.actions,
+    this.showThemeToggle = false,
   });
 
   final String title;
@@ -20,6 +22,7 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onBack;
   final Widget? leading;
   final List<Widget>? actions;
+  final bool showThemeToggle;
 
   @override
   Size get preferredSize => const Size.fromHeight(AppLayout.topBarHeight);
@@ -75,8 +78,14 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
               ],
             ),
           ),
-          if (actions != null)
-            Row(mainAxisSize: MainAxisSize.min, children: actions!),
+          if (actions != null || showThemeToggle)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...?actions,
+                if (showThemeToggle) const ThemeToggleButton(),
+              ],
+            ),
         ],
       ),
     );

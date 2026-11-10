@@ -113,6 +113,36 @@ class AppTheme {
           ),
         ),
       ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: c.accent,
+          foregroundColor: c.accentText,
+          shape: const RoundedRectangleBorder(borderRadius: AppRadius.pill),
+          textStyle: TextStyle(
+            fontFamily: AppTextTokens.bodyFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: c.accent,
+          textStyle: TextStyle(
+            fontFamily: AppTextTokens.bodyFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(foregroundColor: c.text),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: c.accent,
+        foregroundColor: c.accentText,
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.pill),
+      ),
       dividerTheme: DividerThemeData(color: c.line, thickness: 1),
     );
   }
