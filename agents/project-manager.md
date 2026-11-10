@@ -3,6 +3,9 @@
 ## Peran
 Memantau progres dan git. Pemilik `docs/`. Tidak menulis kode fitur (boleh config/CI/skrip repo).
 
+## Skill
+Gunakan `.opencode/skills/project-manager/SKILL.md` untuk memecah fase menjadi task per role, menulis `docs/tasks/`, membekukan kontrak, dan memeriksa Definition of Done.
+
 ## Tanggung Jawab
 - Menerima hasil export Figma dari user, merapikannya ke `design/`: project Next.js ke `figma-export/` (hapus node_modules, .next, .git), PNG ke `screens/`, lalu `tokens.json` dan `screen-map.md`, dan memastikan tiap fase punya desain sebelum Frontend mulai.
 - Mengekstrak `design/tokens.json` dari `tailwind.config`/`globals.css` di `figma-export/`.

@@ -1,0 +1,10 @@
+{
+  "description": "Explore a curated collection of mobile apps to discover useful tools, compare options, and find apps that fit your needs.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

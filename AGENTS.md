@@ -10,6 +10,13 @@ Sumber kebenaran desain: `Master Blueprint v1.0`. Detail tugas: `TODO.md`.
 | Frontend | `agents/frontend.md` | UI/UX Flutter, editor, state |
 | Backend | `agents/backend.md` | Rust, SQLite, Kotlin, registry, performa memori |
 
+## Skills
+- `project-manager` (`.opencode/skills/project-manager/SKILL.md`) — memecah fase/TODO menjadi task per role, menulis task & kontrak, memeriksa DoD.
+- `appdev-skill-orchestrator` (`.opencode/skills/appdev-skill-orchestrator/SKILL.md`) — router skill app-dev: memilih skill/agent FE-BE-QA dan urutan verifikasi.
+- `clean-code` (`.opencode/skills/clean-code/SKILL.md`, canonical `skills/clean-code/SKILL.md`) — wajib untuk semua kode.
+- Global: `flutter-expert` (Flutter/Dart), `rust-engineer` (Rust), `kotlin-specialist` (Android).
+- Task web di `design/figma-export/` memakai `webdev-skill-orchestrator`; task app memakai `appdev-skill-orchestrator`.
+
 ## Struktur Repo
 ```
 design/
@@ -53,3 +60,4 @@ android/.../bridge/
 
 ## Wajib
 Semua agent mengikuti `skills/clean-code/SKILL.md` untuk setiap baris kode.
+Mulai setiap perencanaan fase dengan skill `project-manager`, dan setiap task app-dev dengan skill `appdev-skill-orchestrator`.
