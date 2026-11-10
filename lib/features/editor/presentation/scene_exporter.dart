@@ -74,3 +74,4 @@ class SceneExporter {
     return webpPath;
   }
 }
+
