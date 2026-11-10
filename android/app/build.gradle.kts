@@ -44,6 +44,12 @@ kotlin {
     }
 }
 
+dependencies {
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    testImplementation("junit:junit:4.13.2")
+}
+
 flutter {
     source = "../.."
 }
