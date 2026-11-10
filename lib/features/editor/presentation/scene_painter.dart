@@ -18,6 +18,7 @@ class ScenePainter extends CustomPainter {
     this.activeStroke = const [],
     this.activeStrokeColor = '#ff6b00',
     this.activeStrokeWidth = 6.0,
+    this.isExporting = false,
   });
 
   final SceneProject project;
@@ -27,10 +28,13 @@ class ScenePainter extends CustomPainter {
   final List<DrawingPoint> activeStroke;
   final String activeStrokeColor;
   final double activeStrokeWidth;
+  final bool isExporting;
 
   @override
   void paint(Canvas canvas, Size size) {
-    _drawCheckerboard(canvas, size);
+    if (!isExporting) {
+      _drawCheckerboard(canvas, size);
+    }
 
     final double scale = size.width / project.canvasWidth;
     canvas.save();

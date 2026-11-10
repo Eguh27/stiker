@@ -22,6 +22,7 @@ class EditorCanvas extends StatefulWidget {
     this.brushColor = '#ff6b00',
     this.brushSize = 6.0,
     this.onAddDrawingLayer,
+    this.onImagesLoaded,
   });
 
   final SceneProject project;
@@ -32,6 +33,7 @@ class EditorCanvas extends StatefulWidget {
   final String brushColor;
   final double brushSize;
   final ValueChanged<DrawingLayer>? onAddDrawingLayer;
+  final ValueChanged<Map<String, ui.Image>>? onImagesLoaded;
 
   @override
   State<EditorCanvas> createState() => _EditorCanvasState();
@@ -66,6 +68,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
             final frame = await codec.getNextFrame();
             if (mounted) {
               setState(() => _imageCache[layer.imagePath] = frame.image);
+              widget.onImagesLoaded?.call(_imageCache);
             }
           } catch (_) {}
         }
@@ -99,6 +102,20 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 final factor = widget.project.canvasWidth / side;
 
                 return GestureDetector(
+                  onTapUp: (details) {
+                    if (widget.isBrushActive) return;
+                    final local = details.localPosition * factor;
+                    for (final layer in widget.project.layers.reversed) {
+                      if (!layer.visible) continue;
+                      final dx = (local.dx - layer.transform.x).abs();
+                      final dy = (local.dy - layer.transform.y).abs();
+                      final extent = 120.0 * layer.transform.scale;
+                      if (dx <= extent && dy <= extent) {
+                        widget.onSelectLayer(layer.id);
+                        return;
+                      }
+                    }
+                  },
                   onScaleStart: (details) {
                     if (widget.isBrushActive) {
                       final pt = details.localFocalPoint * factor;
@@ -119,8 +136,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     } else if (activeLayer != null) {
                       final delta = details.localFocalPoint - _startFocal;
                       final next = _startTransform.copyWith(
-                        x: _startTransform.x + delta.dx,
-                        y: _startTransform.y + delta.dy,
+                        x: _startTransform.x + delta.dx * factor,
+                        y: _startTransform.y + delta.dy * factor,
                         scale: (_startTransform.scale * details.scale).clamp(
                           0.2,
                           5.0,

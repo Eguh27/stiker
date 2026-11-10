@@ -119,6 +119,23 @@ class EditorNotifier extends Notifier<EditorState> {
     _recordAndApply(state.project.copyWith(layers: nextLayers));
   }
 
+  void updateLayerImage(String id, String imagePath) {
+    final nextLayers = [
+      for (final l in state.project.layers)
+        if (l.id == id && l is ImageLayer)
+          ImageLayer(
+            id: l.id,
+            imagePath: imagePath,
+            stickerId: l.stickerId,
+            transform: l.transform,
+            visible: l.visible,
+          )
+        else
+          l,
+    ];
+    _recordAndApply(state.project.copyWith(layers: nextLayers));
+  }
+
   void removeLayer(String id) {
     final nextLayers = state.project.layers.where((l) => l.id != id).toList();
     _recordAndApply(state.project.copyWith(layers: nextLayers));
