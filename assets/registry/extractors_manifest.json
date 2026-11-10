@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "extractors": [
+    {
+      "domain": ["pinterest.com", "pin.it"],
+      "strategy": "og_image",
+      "needs_login": false
+    }
+  ]
+}
