@@ -3,20 +3,26 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 
-/// Segmented Semua / Inbox dari App.tsx.
+/// Segmented Semua / Inbox dari App.tsx (dinamis per DB).
 class LibrarySegmented extends StatelessWidget {
   const LibrarySegmented({
     super.key,
     required this.selectedIndex,
     required this.onSelected,
+    this.allCount,
+    this.newCount,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  final int? allCount;
+  final int? newCount;
 
   @override
   Widget build(BuildContext context) {
     final AppColors colors = context.colors;
+    final int all = allCount ?? 48;
+    final int inbox = newCount ?? 8;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.s1),
       decoration: BoxDecoration(
@@ -26,13 +32,13 @@ class LibrarySegmented extends StatelessWidget {
       child: Row(
         children: [
           _Segment(
-            label: 'Semua 48',
+            label: 'Semua $all',
             selected: selectedIndex == 0,
             onTap: () => onSelected(0),
             colors: colors,
           ),
           _Segment(
-            label: 'Inbox / Baru 8',
+            label: 'Inbox / Baru $inbox',
             selected: selectedIndex == 1,
             onTap: () => onSelected(1),
             colors: colors,

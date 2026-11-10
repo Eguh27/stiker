@@ -6,7 +6,10 @@ import '../../../core/widgets/sticker_art.dart';
 
 /// HeroCard Library dari App.tsx (OFFLINE-FIRST).
 class LibraryHero extends StatelessWidget {
-  const LibraryHero({super.key});
+  const LibraryHero({super.key, this.stickerCount = 0, this.packCount = 0});
+
+  final int stickerCount;
+  final int packCount;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +45,7 @@ class LibraryHero extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.s2),
                 Text(
-                  '48 stiker tersimpan lokal',
+                  '$stickerCount stiker tersimpan lokal${packCount > 0 ? ' • $packCount paket' : ''}',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
