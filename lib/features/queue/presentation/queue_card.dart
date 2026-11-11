@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/glass/glass_card.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/sticker_art.dart';
@@ -17,16 +18,7 @@ class QueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppColors colors = context.colors;
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.s3),
-      padding: const EdgeInsets.all(AppSpacing.s4),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AppRadius.card,
-        border: Border.all(color: colors.line),
-        boxShadow: AppShadows.card,
-      ),
-      child: Row(
+    return GlassCard(blur: false, margin: const EdgeInsets.only(bottom: AppSpacing.s3), padding: const EdgeInsets.all(AppSpacing.s4), child: Row(
         children: [
           StickerArt(
             color: colors.stickerLavender,

@@ -61,7 +61,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     final int packCount = packs.value?.length ?? 0;
     final int newCount = stickers.value != null
         ? (stickers.value!.length >= 8 ? 8 : stickers.value!.length)
-        : 8;
+        : 0;
 
     final packsList = packs.value ?? const <StickerPack>[];
 
@@ -109,7 +109,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             LibrarySegmented(
               selectedIndex: _segment,
               onSelected: (int value) => setState(() => _segment = value),
-              allCount: stickerCount > 0 ? stickerCount : 48,
+              allCount: stickerCount,
               newCount: newCount,
             ),
             const SizedBox(height: AppSpacing.s4),

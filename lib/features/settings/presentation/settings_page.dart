@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/glass/glass_card.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/state_panels.dart';
@@ -62,15 +63,7 @@ class SettingsPage extends ConsumerWidget {
       data: (SettingsProfile profile) {
         final AppColors colors = context.colors;
         return [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.s4),
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: AppRadius.card,
-              border: Border.all(color: colors.line),
-              boxShadow: AppShadows.card,
-            ),
-            child: Row(
+          GlassCard(blur: false, padding: const EdgeInsets.all(AppSpacing.s4), child: Row(
               children: [
                 AppIcon(AppIconName.sticker, color: colors.accent),
                 const SizedBox(width: AppSpacing.s3),

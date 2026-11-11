@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/glass/glass_card.dart';
 import '../../../core/widgets/sticker_art.dart';
 
-/// HeroCard Library dari App.tsx (OFFLINE-FIRST).
+/// HeroCard Library: kaca vibrant dengan teks putih.
 class LibraryHero extends StatelessWidget {
   const LibraryHero({super.key, this.stickerCount = 0, this.packCount = 0});
 
@@ -14,40 +15,25 @@ class LibraryHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppColors colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.s5),
-      decoration: BoxDecoration(
-        color: colors.accentSoft,
-        borderRadius: AppRadius.card,
-        border: Border.all(color: colors.line),
-        boxShadow: AppShadows.card,
-      ),
+    final TextTheme text = Theme.of(context).textTheme;
+    final String summary =
+        '$stickerCount stiker tersimpan lokal${packCount > 0 ? ' • $packCount paket' : ''}';
+    return GlassCard(
+      vivid: true,
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'OFFLINE-FIRST',
-                  style: TextStyle(
-                    fontSize: AppTextTokens.eyebrowSize,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: AppTextTokens.eyebrowLetterSpacing,
-                    color: colors.accent,
-                  ),
-                ),
+                Text('OFFLINE-FIRST', style: text.labelSmall?.copyWith(color: Colors.white70)),
                 const SizedBox(height: AppSpacing.s2),
                 Text(
                   'Koleksimu,\nSelalu siap.',
-                  style: Theme.of(context).textTheme.titleLarge
-                      ?.copyWith(fontSize: 26, height: 1.04),
+                  style: text.headlineMedium?.copyWith(color: Colors.white, height: 1.05),
                 ),
                 const SizedBox(height: AppSpacing.s2),
-                Text(
-                  '$stickerCount stiker tersimpan lokal${packCount > 0 ? ' • $packCount paket' : ''}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+                Text(summary, style: text.bodyMedium?.copyWith(color: Colors.white70)),
               ],
             ),
           ),
@@ -59,20 +45,12 @@ class LibraryHero extends StatelessWidget {
                 Positioned(
                   right: 0,
                   top: 0,
-                  child: StickerArt(
-                    color: colors.stickerPeach,
-                    label: 'YAY',
-                    small: true,
-                  ),
+                  child: StickerArt(color: colors.stickerPeach, label: 'YAY', small: true),
                 ),
                 Positioned(
                   left: 0,
                   bottom: 0,
-                  child: StickerArt(
-                    color: colors.stickerLavender,
-                    label: 'YES',
-                    small: true,
-                  ),
+                  child: StickerArt(color: colors.stickerLavender, label: 'YES', small: true),
                 ),
               ],
             ),

@@ -23,21 +23,23 @@ class UrlImportRunner {
     required this.extractorsManifestPath,
     ExternalMediaResolver? resolver,
     String Function(ResolveError error)? describeError,
+    this.staleAfter = const Duration(minutes: 2),
   }) : _resolver = resolver ?? resolveExternalMedia,
        _describeError = describeError ?? describeResolveError;
 
   final UrlImportQueueStore store;
   final FileSystemManager fileSystemManager;
   final String extractorsManifestPath;
+  final Duration staleAfter;
   final ExternalMediaResolver _resolver;
   final String Function(ResolveError error) _describeError;
 
   Future<int> processPending() async {
-    await store.resetInterrupted();
+    await store.resetInterrupted(olderThan: staleAfter);
     var processed = 0;
 
     while (true) {
-      final entry = await store.fetchNextPending();
+      final entry = await store.claimNextPending();
       if (entry == null) {
         return processed;
       }
@@ -64,7 +66,6 @@ class UrlImportRunner {
     }
 
     try {
-      await store.markDownloading(entry.id);
       var downloaded = false;
       try {
         await _resolver(

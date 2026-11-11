@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import 'app_icon.dart';
+import 'glass/glass_icon_button.dart';
 import 'theme_toggle_button.dart';
 
-/// TopBar dari screen-map: eyebrow + title + back/action, tinggi 96.
+/// TopBar kaca: eyebrow + judul + back/aksi. Toggle tema tampil di semua layar.
 class TopBar extends StatelessWidget implements PreferredSizeWidget {
   const TopBar({
     super.key,
@@ -14,7 +15,7 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
     this.onBack,
     this.leading,
     this.actions,
-    this.showThemeToggle = false,
+    this.showThemeToggle = true,
   });
 
   final String title;
@@ -31,63 +32,51 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final AppColors colors = context.colors;
     final TextTheme textTheme = Theme.of(context).textTheme;
-    return Container(
+    return SizedBox(
       height: AppLayout.topBarHeight,
-      padding: const EdgeInsets.only(
-        top: AppSpacing.s6,
-        left: AppSpacing.s5,
-        right: AppSpacing.s5,
-        bottom: AppSpacing.s3,
-      ),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(bottom: BorderSide(color: colors.line)),
-      ),
-      child: Row(
-        children: [
-          if (onBack != null) ...[
-            IconButton(
-              onPressed: onBack,
-              tooltip: 'Kembali',
-              icon: AppIcon(AppIconName.back, color: colors.text),
-            ),
-            const SizedBox(width: AppSpacing.s2),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.s5,
+          AppSpacing.s6,
+          AppSpacing.s5,
+          AppSpacing.s2,
+        ),
+        child: Row(
+          children: [
+            if (onBack != null) ...[
+              GlassIconButton(
+                tooltip: 'Kembali',
+                onPressed: onBack,
+                icon: AppIcon(AppIconName.back, color: colors.text),
+              ),
+              const SizedBox(width: AppSpacing.s3),
+            ],
+            if (leading != null) ...[leading!, const SizedBox(width: AppSpacing.s2)],
+            Expanded(child: _titles(textTheme, colors)),
+            ...?actions,
+            if (showThemeToggle) ...[
+              const SizedBox(width: AppSpacing.s2),
+              const ThemeToggleButton(),
+            ],
           ],
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: AppSpacing.s2),
-          ],
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  eyebrow.toUpperCase(),
-                  style: textTheme.labelSmall?.copyWith(
-                    color: colors.text3,
-                    letterSpacing: AppTextTokens.eyebrowLetterSpacing,
-                  ),
-                ),
-                Text(
-                  title,
-                  style: textTheme.titleLarge,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          if (actions != null || showThemeToggle)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ...?actions,
-                if (showThemeToggle) const ThemeToggleButton(),
-              ],
-            ),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _titles(TextTheme textTheme, AppColors colors) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(eyebrow.toUpperCase(), style: textTheme.labelSmall),
+        Text(
+          title,
+          style: textTheme.titleLarge,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 }

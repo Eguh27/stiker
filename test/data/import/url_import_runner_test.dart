@@ -57,6 +57,7 @@ void main() {
           .registryFile(RegistryEngine.extractorsManifestFileName)
           .path,
       resolver: resolver.call,
+      staleAfter: Duration.zero,
     );
   }
 

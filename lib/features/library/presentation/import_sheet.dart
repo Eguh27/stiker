@@ -41,7 +41,7 @@ class ImportSheet extends StatelessWidget {
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: context.colors.bg,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.card),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.sheet),
       builder: (BuildContext sheetContext) => ImportSheet(
         onGallery: () => runImport(sheetContext),
         onBulk: () => runImport(sheetContext),

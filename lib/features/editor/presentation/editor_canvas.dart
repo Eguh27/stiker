@@ -43,6 +43,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   Offset _startFocal = Offset.zero;
   LayerTransform _startTransform = const LayerTransform();
   final Map<String, ui.Image> _imageCache = {};
+  final Set<String> _loading = {};
   List<DrawingPoint> _currentStroke = [];
 
   @override
@@ -59,20 +60,31 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   Future<void> _loadImages() async {
     for (final layer in widget.project.layers) {
-      if (layer is ImageLayer && !_imageCache.containsKey(layer.imagePath)) {
-        final file = File(layer.imagePath);
-        if (await file.exists()) {
-          try {
-            final bytes = await file.readAsBytes();
-            final codec = await ui.instantiateImageCodec(bytes);
-            final frame = await codec.getNextFrame();
-            if (mounted) {
-              setState(() => _imageCache[layer.imagePath] = frame.image);
-              widget.onImagesLoaded?.call(_imageCache);
-            }
-          } catch (_) {}
-        }
+      if (layer is! ImageLayer) continue;
+      final path = layer.imagePath;
+      if (_imageCache.containsKey(path) || !_loading.add(path)) continue;
+      try {
+        await _decodeInto(path);
+      } finally {
+        _loading.remove(path);
       }
+    }
+  }
+
+  Future<void> _decodeInto(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return;
+    try {
+      final codec = await ui.instantiateImageCodec(await file.readAsBytes());
+      final frame = await codec.getNextFrame();
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      setState(() => _imageCache[path] = frame.image);
+      widget.onImagesLoaded?.call(_imageCache);
+    } catch (error) {
+      debugPrint('Gagal memuat gambar layer $path: $error');
     }
   }
 
@@ -89,10 +101,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
         child: Container(
           margin: const EdgeInsets.all(AppSpacing.s4),
           decoration: BoxDecoration(
-            color: colors.surface,
+            color: colors.glassFill,
             borderRadius: AppRadius.card,
-            border: Border.all(color: colors.line),
-            boxShadow: AppShadows.card,
+            border: Border.all(color: colors.glassBorder),
+            boxShadow: AppShadows.glass,
           ),
           child: ClipRRect(
             borderRadius: AppRadius.card,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import 'app_icon.dart';
+import 'glass/glass_card.dart';
 
 /// Panel loading/empty/error dari `App.tsx::StatePanel` (screen-map).
 class LoadingState extends StatelessWidget {
@@ -104,16 +105,5 @@ class _StatePanel extends StatelessWidget {
   const _StatePanel({required this.child});
   final Widget child;
   @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.s5),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AppRadius.card,
-        border: Border.all(color: colors.line),
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) => GlassCard(child: child);
 }

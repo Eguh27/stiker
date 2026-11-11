@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/glass/glass_card.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../domain/sticker_pack.dart';
@@ -17,16 +18,7 @@ class PackCard extends StatelessWidget {
     final AppColors colors = context.colors;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: AppSpacing.s3),
-        padding: const EdgeInsets.all(AppSpacing.s4),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: AppRadius.card,
-          border: Border.all(color: colors.line),
-          boxShadow: AppShadows.card,
-        ),
-        child: Row(
+      child: GlassCard(blur: false, margin: const EdgeInsets.only(bottom: AppSpacing.s3), padding: const EdgeInsets.all(AppSpacing.s4), child: Row(
           children: [
             Expanded(
               child: Column(

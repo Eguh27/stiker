@@ -18,7 +18,7 @@ class StickerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppColors colors = context.colors;
     return Material(
-      color: colors.surface,
+      color: colors.glassFill,
       borderRadius: AppRadius.card,
       child: InkWell(
         borderRadius: AppRadius.card,
@@ -26,8 +26,8 @@ class StickerCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: AppRadius.card,
-            border: Border.all(color: colors.line),
-            boxShadow: AppShadows.card,
+            border: Border.all(color: colors.glassBorder),
+            boxShadow: AppShadows.glass,
           ),
           child: Stack(
             alignment: Alignment.center,

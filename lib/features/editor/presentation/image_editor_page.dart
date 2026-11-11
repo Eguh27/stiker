@@ -228,7 +228,6 @@ class _ImageEditorPageState extends ConsumerState<ImageEditorPage> {
     final notifier = ref.read(editorProvider(widget.stickerId).notifier);
 
     return Scaffold(
-      backgroundColor: colors.bg,
       appBar: TopBar(
         title: 'Edit stiker',
         onBack: () => Navigator.of(context).pop(),

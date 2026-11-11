@@ -4,29 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/settings/presentation/settings_providers.dart';
 import '../theme/app_colors.dart';
 import 'app_icon.dart';
+import 'glass/glass_icon_button.dart';
 
-/// Tombol toggle tema terang/gelap (Bug 3: Theme button).
+/// Tombol bulat kaca untuk ganti tema terang/gelap.
 class ThemeToggleButton extends ConsumerWidget {
   const ThemeToggleButton({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.colors;
-    final themeMode = ref.watch(themeModeProvider);
-    final isDark =
-        themeMode == ThemeMode.dark ||
-        (themeMode == ThemeMode.system &&
-            Theme.of(context).brightness == Brightness.dark);
-
-    return IconButton(
+    final AppColors colors = context.colors;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return GlassIconButton(
       tooltip: isDark ? 'Mode terang' : 'Mode gelap',
-      icon: AppIcon(
-        isDark ? AppIconName.sun : AppIconName.moon,
-        color: colors.text,
-      ),
-      onPressed: () {
-        ref.read(themeModeProvider.notifier).setDark(!isDark);
-      },
+      icon: AppIcon(isDark ? AppIconName.sun : AppIconName.moon, color: colors.text),
+      onPressed: () => ref.read(themeModeProvider.notifier).setDark(!isDark),
     );
   }
 }

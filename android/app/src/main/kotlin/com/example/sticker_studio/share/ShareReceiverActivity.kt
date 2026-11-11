@@ -41,7 +41,10 @@ class ShareReceiverActivity : Activity() {
 
                 withContext(NonCancellable + Dispatchers.Main) {
                     val toastMessage = when (parseResult) {
-                        is ShareParseResult.Accepted -> "Gambar berhasil ditambahkan pada stiker"
+                        is ShareParseResult.Accepted -> when (parseResult.payload) {
+                            is SharePayload.Url -> "Tautan diterima, gambar diunduh di latar belakang"
+                            is SharePayload.Images -> "Gambar masuk ke antrean impor"
+                        }
                         is ShareParseResult.Rejected -> parseResult.message
                         ShareParseResult.Ignored -> "Format konten tidak didukung"
                     }

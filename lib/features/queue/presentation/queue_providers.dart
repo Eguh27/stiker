@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sticker_studio/features/data/import/foreground_import_runner.dart';
+// Satu-satunya provider runner ada di foreground_import_runner.dart.
+export 'package:sticker_studio/features/data/import/foreground_import_runner.dart'
+    show foregroundImportRunnerProvider;
 
 import '../data/app_database_provider.dart';
 import '../data/drift_queue_repository.dart';
@@ -8,11 +10,6 @@ import '../domain/queue_repository.dart';
 
 final queueRepositoryProvider = Provider<QueueRepository>((ref) {
   return DriftQueueRepository(ref.watch(appDatabaseProvider));
-});
-
-final foregroundImportRunnerProvider = Provider<ForegroundImportRunner>((ref) {
-  final db = ref.watch(appDatabaseProvider);
-  return ForegroundImportRunner(db);
 });
 
 final queueListProvider = FutureProvider<List<QueueItem>>((ref) async {

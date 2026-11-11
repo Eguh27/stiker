@@ -48,12 +48,41 @@ class UrlImportQueueStore {
         .getSingleOrNull();
   }
 
-  Future<int> resetInterrupted() {
-    return (_database.update(_database.importQueue)..where(
-          (row) =>
+  /// Ambil baris PENDING berikutnya dan tandai DOWNLOADING dalam satu UPDATE
+  /// atomik, supaya foreground runner dan WorkManager tidak memproses baris sama.
+  Future<ImportQueueEntry?> claimNextPending() async {
+    while (true) {
+      final entry = await fetchNextPending();
+      if (entry == null) return null;
+      final claimed =
+          await (_database.update(_database.importQueue)..where(
+                (row) =>
+                    row.id.equals(entry.id) &
+                    row.status.equalsValue(ImportStatus.pending),
+              ))
+              .write(
+                ImportQueueCompanion(
+                  status: const Value(ImportStatus.downloading),
+                  progress: const Value(10),
+                  errorMessage: const Value(null),
+                  updatedAt: Value(_now()),
+                ),
+              );
+      if (claimed == 1) return entry;
+    }
+  }
+
+  /// Kembalikan unduhan terputus ke PENDING. Dengan [olderThan], hanya baris
+  /// yang sudah lama tidak berubah, agar unduhan runner lain tidak ikut di-reset.
+  Future<int> resetInterrupted({Duration? olderThan}) {
+    return (_database.update(_database.importQueue)..where((row) {
+          final interrupted =
               row.sourceUrl.isNotNull() &
-              row.status.equalsValue(ImportStatus.downloading),
-        ))
+              row.status.equalsValue(ImportStatus.downloading);
+          if (olderThan == null) return interrupted;
+          return interrupted &
+              row.updatedAt.isSmallerOrEqualValue(_now().subtract(olderThan));
+        }))
         .write(
           ImportQueueCompanion(
             status: const Value(ImportStatus.pending),

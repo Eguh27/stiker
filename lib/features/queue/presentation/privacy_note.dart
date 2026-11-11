@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/glass/glass_card.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon.dart';
 
@@ -10,14 +11,7 @@ class PrivacyNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppColors colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.s4),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AppRadius.card,
-        border: Border.all(color: colors.line),
-      ),
-      child: Row(
+    return GlassCard(blur: false, padding: const EdgeInsets.all(AppSpacing.s4), child: Row(
         children: [
           AppIcon(AppIconName.cloud, color: colors.accent),
           const SizedBox(width: AppSpacing.s3),

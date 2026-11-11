@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'background_import.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/bottom_nav.dart';
+import 'core/widgets/glass/glass_background.dart';
 import 'features/data/app_database.dart';
 import 'features/data/file_system_manager.dart';
 import 'features/data/import/foreground_import_runner.dart';
@@ -55,6 +56,8 @@ class StickerStudioApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ref.watch(themeModeProvider),
+      builder: (context, child) =>
+          GlassBackground(child: child ?? const SizedBox.shrink()),
       home: const AppShell(),
     );
   }
@@ -122,6 +125,7 @@ class _AppShellState extends ConsumerState<AppShell>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: BottomNav(
         currentIndex: _currentIndex,

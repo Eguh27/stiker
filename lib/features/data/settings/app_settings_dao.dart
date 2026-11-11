@@ -29,4 +29,19 @@ class AppSettingsDao {
           ),
         );
   }
+
+  Future<String?> getString(String key) async {
+    final AppSetting? setting = await (_database.select(
+      _database.appSettings,
+    )..where((row) => row.key.equals(key))).getSingleOrNull();
+    return setting?.value;
+  }
+
+  Future<void> setString(String key, String value) async {
+    await _database
+        .into(_database.appSettings)
+        .insertOnConflictUpdate(
+          AppSettingsCompanion.insert(key: key, value: value, updatedAt: _now()),
+        );
+  }
 }
