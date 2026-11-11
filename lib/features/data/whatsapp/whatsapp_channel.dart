@@ -42,10 +42,18 @@ class MethodChannelWhatsAppChannel implements WhatsAppChannel {
         'isBusiness': isBusiness,
       });
       return res ?? false;
-    } on PlatformException {
-      return false;
+    } on PlatformException catch (error) {
+      throw StateError(_describe(error));
+    } on MissingPluginException {
+      throw StateError('Channel WhatsApp belum terdaftar di sisi Android');
     }
   }
+
+  String _describe(PlatformException error) => switch (error.code) {
+    'NOT_INSTALLED' => 'WhatsApp tidak terpasang',
+    'INTENT_FAILED' => 'WhatsApp menolak permintaan: ${error.message}',
+    _ => error.message ?? error.code,
+  };
 
   @override
   Future<String> getStagingDirectory() async {

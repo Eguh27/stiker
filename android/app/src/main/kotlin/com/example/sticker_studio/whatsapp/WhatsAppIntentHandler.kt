@@ -1,20 +1,27 @@
 package com.example.sticker_studio.whatsapp
 
+import android.app.Activity
 import android.content.Context
+import android.util.Log
 import android.content.Intent
 import android.content.pm.PackageManager
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
-class WhatsAppIntentHandler(private val context: Context) : MethodChannel.MethodCallHandler {
+class WhatsAppIntentHandler(
+    private val context: Context,
+    private val activityProvider: () -> Activity? = { null },
+) : MethodChannel.MethodCallHandler {
 
     companion object {
+        private const val TAG = "StickerStudioWA"
         const val CHANNEL_NAME = "com.example.sticker_studio/whatsapp"
         const val ACTION_ENABLE_STICKER_PACK = "com.whatsapp.intent.action.ENABLE_STICKER_PACK"
-        const val EXTRA_STICKER_PACK_ID = "EXTRA_STICKER_PACK_ID"
-        const val EXTRA_STICKER_PACK_AUTHORITY = "EXTRA_STICKER_PACK_AUTHORITY"
-        const val EXTRA_STICKER_PACK_NAME = "EXTRA_STICKER_PACK_NAME"
+        const val EXTRA_STICKER_PACK_ID = "sticker_pack_id"
+        const val EXTRA_STICKER_PACK_AUTHORITY = "sticker_pack_authority"
+        const val EXTRA_STICKER_PACK_NAME = "sticker_pack_name"
+        const val REQUEST_ADD_PACK = 200
         const val AUTHORITY = "com.example.sticker_studio.stickercontentprovider"
         const val PACKAGE_WHATSAPP = "com.whatsapp"
         const val PACKAGE_WHATSAPP_BUSINESS = "com.whatsapp.w4b"
@@ -48,13 +55,21 @@ class WhatsAppIntentHandler(private val context: Context) : MethodChannel.Method
                     putExtra(EXTRA_STICKER_PACK_AUTHORITY, AUTHORITY)
                     putExtra(EXTRA_STICKER_PACK_NAME, name)
                     setPackage(targetPackage)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
 
+                // WhatsApp mengenali pemanggil lewat startActivityForResult;
+                // memakai startActivity biasa membuat permintaan diabaikan.
+                val activity = activityProvider()
+                if (activity == null) {
+                    result.error("NO_ACTIVITY", "Activity tidak tersedia", null)
+                    return
+                }
                 try {
-                    context.startActivity(intent)
+                    Log.d(TAG, "ENABLE_STICKER_PACK id=$id authority=$AUTHORITY target=$targetPackage")
+                    activity.startActivityForResult(intent, REQUEST_ADD_PACK)
                     result.success(true)
                 } catch (e: Exception) {
+                    Log.e(TAG, "Gagal membuka WhatsApp", e)
                     result.error("INTENT_FAILED", e.message, null)
                 }
             }

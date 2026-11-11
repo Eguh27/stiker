@@ -8,6 +8,8 @@ import 'package:sticker_studio/core/theme/app_spacing.dart';
 import '../domain/drawing_layer.dart';
 import '../domain/scene_layer.dart';
 import '../domain/scene_project.dart';
+import 'brush_input_layer.dart';
+import 'layer_gesture_layer.dart';
 import 'scene_painter.dart';
 
 /// Area kanvas editor dengan manipulasi layer & goresan kuas.
@@ -40,8 +42,6 @@ class EditorCanvas extends StatefulWidget {
 }
 
 class _EditorCanvasState extends State<EditorCanvas> {
-  Offset _startFocal = Offset.zero;
-  LayerTransform _startTransform = const LayerTransform();
   final Map<String, ui.Image> _imageCache = {};
   final Set<String> _loading = {};
   List<DrawingPoint> _currentStroke = [];
@@ -88,10 +88,35 @@ class _EditorCanvasState extends State<EditorCanvas> {
     }
   }
 
+  void _endStroke() {
+    if (_currentStroke.isEmpty) return;
+    final double cx = widget.project.canvasWidth / 2;
+    final double cy = widget.project.canvasHeight / 2;
+    // Titik disimpan relatif ke pusat layer agar tidak bergeser saat dirender.
+    final List<DrawingPoint> relative = [
+      for (final p in _currentStroke) DrawingPoint(p.x - cx, p.y - cy),
+    ];
+    if (relative.length == 1) relative.add(relative.first);
+    widget.onAddDrawingLayer?.call(
+      DrawingLayer(
+        id: 'brush-${DateTime.now().millisecondsSinceEpoch}',
+        color: widget.brushColor,
+        strokeWidth: widget.brushSize,
+        transform: LayerTransform(x: cx, y: cy),
+        points: List.unmodifiable(relative),
+      ),
+    );
+    setState(() => _currentStroke = []);
+  }
+
+  void _addPoint(Offset point) {
+    setState(() => _currentStroke = [..._currentStroke, DrawingPoint(point.dx, point.dy)]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final activeLayer = widget.project.layers
+    final SceneLayer? activeLayer = widget.project.layers
         .where((l) => l.id == widget.activeLayerId)
         .firstOrNull;
 
@@ -102,87 +127,48 @@ class _EditorCanvasState extends State<EditorCanvas> {
           margin: const EdgeInsets.all(AppSpacing.s4),
           decoration: BoxDecoration(
             color: colors.glassFill,
-            borderRadius: AppRadius.card,
+            borderRadius: AppRadius.control,
             border: Border.all(color: colors.glassBorder),
             boxShadow: AppShadows.glass,
           ),
           child: ClipRRect(
-            borderRadius: AppRadius.card,
+            borderRadius: AppRadius.control,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final side = constraints.maxWidth;
-                final factor = widget.project.canvasWidth / side;
-
-                return GestureDetector(
-                  onTapUp: (details) {
-                    if (widget.isBrushActive) return;
-                    final local = details.localPosition * factor;
-                    for (final layer in widget.project.layers.reversed) {
-                      if (!layer.visible) continue;
-                      final dx = (local.dx - layer.transform.x).abs();
-                      final dy = (local.dy - layer.transform.y).abs();
-                      final extent = 120.0 * layer.transform.scale;
-                      if (dx <= extent && dy <= extent) {
-                        widget.onSelectLayer(layer.id);
-                        return;
-                      }
-                    }
-                  },
-                  onScaleStart: (details) {
-                    if (widget.isBrushActive) {
-                      final pt = details.localFocalPoint * factor;
-                      setState(() {
-                        _currentStroke = [DrawingPoint(pt.dx, pt.dy)];
-                      });
-                    } else if (activeLayer != null) {
-                      _startFocal = details.localFocalPoint;
-                      _startTransform = activeLayer.transform;
-                    }
-                  },
-                  onScaleUpdate: (details) {
-                    if (widget.isBrushActive) {
-                      final pt = details.localFocalPoint * factor;
-                      setState(() {
-                        _currentStroke.add(DrawingPoint(pt.dx, pt.dy));
-                      });
-                    } else if (activeLayer != null) {
-                      final delta = details.localFocalPoint - _startFocal;
-                      final next = _startTransform.copyWith(
-                        x: _startTransform.x + delta.dx * factor,
-                        y: _startTransform.y + delta.dy * factor,
-                        scale: (_startTransform.scale * details.scale).clamp(
-                          0.2,
-                          5.0,
-                        ),
-                        rotation: _startTransform.rotation + details.rotation,
-                      );
-                      widget.onTransformLayer(activeLayer.id, next);
-                    }
-                  },
-                  onScaleEnd: (details) {
-                    if (widget.isBrushActive && _currentStroke.isNotEmpty) {
-                      final stroke = DrawingLayer(
-                        id: 'brush-${DateTime.now().millisecondsSinceEpoch}',
-                        color: widget.brushColor,
-                        strokeWidth: widget.brushSize,
-                        points: List.unmodifiable(_currentStroke),
-                      );
-                      widget.onAddDrawingLayer?.call(stroke);
-                      setState(() => _currentStroke = []);
-                    }
-                  },
-                  child: CustomPaint(
-                    painter: ScenePainter(
-                      project: widget.project,
-                      activeLayerId: widget.activeLayerId,
-                      colors: colors,
-                      images: _imageCache,
-                      activeStroke: _currentStroke,
-                      activeStrokeColor: widget.brushColor,
-                      activeStrokeWidth: widget.brushSize,
-                    ),
-                    child: const SizedBox.expand(),
+                final double factor =
+                    widget.project.canvasWidth / constraints.maxWidth;
+                final Widget canvas = CustomPaint(
+                  painter: ScenePainter(
+                    project: widget.project,
+                    activeLayerId: widget.activeLayerId,
+                    colors: colors,
+                    images: _imageCache,
+                    activeStroke: _currentStroke,
+                    activeStrokeColor: widget.brushColor,
+                    activeStrokeWidth: widget.brushSize,
+                    showSelection: !widget.isBrushActive,
                   ),
+                  child: const SizedBox.expand(),
+                );
+                if (widget.isBrushActive) {
+                  return BrushInputLayer(
+                    factor: factor,
+                    onStart: (point) => setState(
+                      () => _currentStroke = [DrawingPoint(point.dx, point.dy)],
+                    ),
+                    onMove: _addPoint,
+                    onEnd: _endStroke,
+                    child: canvas,
+                  );
+                }
+                return LayerGestureLayer(
+                  project: widget.project,
+                  activeLayer: activeLayer,
+                  images: _imageCache,
+                  factor: factor,
+                  onSelectLayer: widget.onSelectLayer,
+                  onTransformLayer: widget.onTransformLayer,
+                  child: canvas,
                 );
               },
             ),

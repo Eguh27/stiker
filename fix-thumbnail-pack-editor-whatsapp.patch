@@ -1,0 +1,1331 @@
+diff --git a/lib/core/widgets/file_thumbnail.dart b/lib/core/widgets/file_thumbnail.dart
+new file mode 100644
+index 0000000..0d90083
+--- /dev/null
++++ b/lib/core/widgets/file_thumbnail.dart
+@@ -0,0 +1,38 @@
++import 'dart:io';
++
++import 'package:flutter/material.dart';
++
++/// Pratinjau gambar dari file lokal; [fallback] tampil bila file tidak ada
++/// atau gagal didecode. Decode dikecilkan lewat [cacheSize] agar hemat memori.
++class FileThumbnail extends StatelessWidget {
++  const FileThumbnail({
++    super.key,
++    required this.path,
++    required this.fallback,
++    this.size = 56,
++    this.cacheSize = 256,
++  });
++
++  final String? path;
++  final Widget fallback;
++  final double size;
++  final int cacheSize;
++
++  @override
++  Widget build(BuildContext context) {
++    final String? filePath = path;
++    final bool hasFile = filePath != null && File(filePath).existsSync();
++    return SizedBox(
++      width: size,
++      height: size,
++      child: hasFile
++          ? Image.file(
++              File(filePath),
++              fit: BoxFit.contain,
++              cacheWidth: cacheSize,
++              errorBuilder: (_, _, _) => fallback,
++            )
++          : fallback,
++    );
++  }
++}
+diff --git a/lib/features/data/pack/drift_pack_editor_adapter.dart b/lib/features/data/pack/drift_pack_editor_adapter.dart
+index 17671fe..8ba4cfb 100644
+--- a/lib/features/data/pack/drift_pack_editor_adapter.dart
++++ b/lib/features/data/pack/drift_pack_editor_adapter.dart
+@@ -4,6 +4,7 @@ import 'package:sticker_studio/features/library/domain/sticker.dart' as domain;
+ import 'package:sticker_studio/features/packs/domain/pack_repository.dart';
+ import 'package:sticker_studio/features/packs/domain/sticker_pack.dart';
+ 
++import '../sticker/sticker_row_mapper.dart';
+ import 'pack_details.dart';
+ import 'pack_repository_impl.dart';
+ 
+@@ -109,17 +110,9 @@ class DriftPackEditorAdapter implements PackEditorRepository {
+       _database.stickers,
+     )..where((t) => t.id.isIn(ids))).get();
+     final Map<String, Sticker> map = {for (final row in rows) row.id: row};
+-    const colors = domain.StickerColorKind.values;
+-    const shapes = domain.StickerShape.values;
+     return [
+-      for (int i = 0; i < ids.length; i++)
+-        domain.Sticker(
+-          id: ids[i],
+-          label: 'Stiker ${i + 1}',
+-          colorKind: colors[i % colors.length],
+-          shape: shapes[i % shapes.length],
+-          sourceLabel: map[ids[i]]?.sourceType.name ?? 'Daily',
+-        ),
++      for (final id in ids)
++        map[id] != null ? stickerFromRow(map[id]!) : missingSticker(id),
+     ];
+   }
+ 
+diff --git a/lib/features/data/sticker/drift_sticker_repository.dart b/lib/features/data/sticker/drift_sticker_repository.dart
+index e0e75c0..8aa1c75 100644
+--- a/lib/features/data/sticker/drift_sticker_repository.dart
++++ b/lib/features/data/sticker/drift_sticker_repository.dart
+@@ -4,6 +4,7 @@ import '../app_database.dart' hide Sticker;
+ import '../database/database_enums.dart';
+ import '../../library/domain/sticker.dart';
+ import '../../library/domain/sticker_repository.dart';
++import 'sticker_row_mapper.dart';
+ 
+ /// Implementasi SQLite Drift untuk StickerRepository.
+ class DriftStickerRepository implements StickerRepository {
+@@ -17,19 +18,7 @@ class DriftStickerRepository implements StickerRepository {
+       _database.stickers,
+     )..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
+ 
+-    return rows.map((r) {
+-      final hash = r.id.hashCode.abs();
+-      return Sticker(
+-        id: r.id,
+-        label: r.id.length > 6 ? r.id.substring(0, 6) : r.id,
+-        colorKind:
+-            StickerColorKind.values[hash % StickerColorKind.values.length],
+-        shape: StickerShape.values[hash % StickerShape.values.length],
+-        sourceLabel: r.sourceType.databaseValue.split('_').first,
+-        isNew: DateTime.now().difference(r.createdAt).inHours < 24,
+-        filePath: r.filePath,
+-      );
+-    }).toList();
++    return rows.map(stickerFromRow).toList();
+   }
+ 
+   Future<void> addSticker({
+diff --git a/lib/features/data/sticker/sticker_row_mapper.dart b/lib/features/data/sticker/sticker_row_mapper.dart
+new file mode 100644
+index 0000000..e1f179d
+--- /dev/null
++++ b/lib/features/data/sticker/sticker_row_mapper.dart
+@@ -0,0 +1,38 @@
++import '../app_database.dart' as db;
++import '../../library/domain/sticker.dart';
++
++/// Hash stabil antar-sesi (String.hashCode tidak dijamin sama) supaya warna
++/// dan bentuk placeholder untuk satu stiker selalu konsisten.
++int stableHash(String value) {
++  var hash = 7;
++  for (final unit in value.codeUnits) {
++    hash = (hash * 31 + unit) & 0x7fffffff;
++  }
++  return hash;
++}
++
++/// Baris tabel `stickers` -> model domain, termasuk `filePath` agar gambar
++/// asli selalu tampil di library, pack, dan picker.
++Sticker stickerFromRow(db.Sticker row) {
++  final hash = stableHash(row.id);
++  return Sticker(
++    id: row.id,
++    label: row.id.length > 6 ? row.id.substring(0, 6) : row.id,
++    colorKind: StickerColorKind.values[hash % StickerColorKind.values.length],
++    shape: StickerShape.values[hash % StickerShape.values.length],
++    sourceLabel: row.sourceType.databaseValue.split('_').first,
++    isNew: DateTime.now().difference(row.createdAt).inHours < 24,
++    filePath: row.filePath,
++  );
++}
++
++/// Placeholder untuk id yang barisnya sudah tidak ada di database.
++Sticker missingSticker(String id) {
++  final hash = stableHash(id);
++  return Sticker(
++    id: id,
++    label: id.length > 6 ? id.substring(0, 6) : id,
++    colorKind: StickerColorKind.values[hash % StickerColorKind.values.length],
++    shape: StickerShape.values[hash % StickerShape.values.length],
++  );
++}
+diff --git a/lib/features/data/whatsapp/tray_icon_builder.dart b/lib/features/data/whatsapp/tray_icon_builder.dart
+new file mode 100644
+index 0000000..622ddb1
+--- /dev/null
++++ b/lib/features/data/whatsapp/tray_icon_builder.dart
+@@ -0,0 +1,26 @@
++import 'dart:io';
++import 'dart:ui' as ui;
++
++/// Membuat ikon tray 96x96 PNG (syarat WhatsApp) dari salah satu stiker.
++class TrayIconBuilder {
++  const TrayIconBuilder();
++
++  static const int size = 96;
++
++  Future<void> build({
++    required String sourcePath,
++    required String outputPath,
++  }) async {
++    final bytes = await File(sourcePath).readAsBytes();
++    final codec = await ui.instantiateImageCodec(
++      bytes,
++      targetWidth: size,
++      targetHeight: size,
++    );
++    final frame = await codec.getNextFrame();
++    final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
++    frame.image.dispose();
++    if (data == null) throw StateError('Gagal membuat ikon tray');
++    await File(outputPath).writeAsBytes(data.buffer.asUint8List(), flush: true);
++  }
++}
+diff --git a/lib/features/data/whatsapp/whatsapp_channel.dart b/lib/features/data/whatsapp/whatsapp_channel.dart
+index 3428caf..b66c351 100644
+--- a/lib/features/data/whatsapp/whatsapp_channel.dart
++++ b/lib/features/data/whatsapp/whatsapp_channel.dart
+@@ -42,11 +42,19 @@ class MethodChannelWhatsAppChannel implements WhatsAppChannel {
+         'isBusiness': isBusiness,
+       });
+       return res ?? false;
+-    } on PlatformException {
+-      return false;
++    } on PlatformException catch (error) {
++      throw StateError(_describe(error));
++    } on MissingPluginException {
++      throw StateError('Channel WhatsApp belum terdaftar di sisi Android');
+     }
+   }
+ 
++  String _describe(PlatformException error) => switch (error.code) {
++    'NOT_INSTALLED' => 'WhatsApp tidak terpasang',
++    'INTENT_FAILED' => 'WhatsApp menolak permintaan: ${error.message}',
++    _ => error.message ?? error.code,
++  };
++
+   @override
+   Future<String> getStagingDirectory() async {
+     try {
+diff --git a/lib/features/data/whatsapp/whatsapp_staging_exporter.dart b/lib/features/data/whatsapp/whatsapp_staging_exporter.dart
+index 68e1abb..902ae25 100644
+--- a/lib/features/data/whatsapp/whatsapp_staging_exporter.dart
++++ b/lib/features/data/whatsapp/whatsapp_staging_exporter.dart
+@@ -1,6 +1,9 @@
+ import 'dart:convert';
+ import 'dart:io';
+ 
++import 'tray_icon_builder.dart';
++import 'whatsapp_sticker_validator.dart';
++
+ class WhatsAppExportResult {
+   const WhatsAppExportResult({
+     required this.stagingPath,
+@@ -13,8 +16,24 @@ class WhatsAppExportResult {
+   final String identifier;
+ }
+ 
++/// Kesalahan ekspor dengan pesan yang bisa langsung ditampilkan ke pengguna.
++class WhatsAppExportException implements Exception {
++  const WhatsAppExportException(this.message);
++
++  final String message;
++
++  @override
++  String toString() => message;
++}
++
+ class WhatsAppStagingExporter {
+-  const WhatsAppStagingExporter();
++  const WhatsAppStagingExporter({
++    this.trayIconBuilder = const TrayIconBuilder(),
++  });
++
++  static const String trayFileName = 'tray.png';
++
++  final TrayIconBuilder trayIconBuilder;
+ 
+   Future<WhatsAppExportResult> exportPack({
+     required String stagingBaseDir,
+@@ -28,64 +47,67 @@ class WhatsAppStagingExporter {
+     if (stickerPaths.length < 3 || stickerPaths.length > 30) {
+       throw ArgumentError('Stiker harus berjumlah 3 sampai 30 untuk WhatsApp');
+     }
++    _validateStickers(stickerPaths);
+ 
+     final packDir = Directory('$stagingBaseDir/$identifier');
+-    if (!packDir.existsSync()) {
+-      packDir.createSync(recursive: true);
+-    }
++    if (packDir.existsSync()) packDir.deleteSync(recursive: true);
++    packDir.createSync(recursive: true);
+ 
+-    // Write tray icon
+-    final trayFile = File('${packDir.path}/tray.webp');
+-    if (trayIconPath != null && File(trayIconPath).existsSync()) {
+-      File(trayIconPath).copySync(trayFile.path);
+-    } else {
+-      trayFile.writeAsBytesSync(const [
+-        82,
+-        73,
+-        70,
+-        70,
+-        0,
+-        0,
+-        0,
+-        0,
+-        87,
+-        69,
+-        66,
+-        80,
+-      ]);
+-    }
++    await trayIconBuilder.build(
++      sourcePath: trayIconPath ?? stickerPaths.first,
++      outputPath: '${packDir.path}/$trayFileName',
++    );
++    final entries = _copyStickers(packDir, stickerPaths, emojis);
++    _writeMetadata(packDir, identifier, name, author, entries);
+ 
+-    // Write stickers
+-    final stickerEntries = <Map<String, dynamic>>[];
+-    for (var i = 0; i < stickerPaths.length; i++) {
+-      final fileName = '${(i + 1).toString().padLeft(2, '0')}.webp';
+-      final destFile = File('${packDir.path}/$fileName');
+-      final srcFile = File(stickerPaths[i]);
+-      if (srcFile.existsSync()) {
+-        srcFile.copySync(destFile.path);
+-      } else {
+-        destFile.writeAsBytesSync(const [
+-          82,
+-          73,
+-          70,
+-          70,
+-          0,
+-          0,
+-          0,
+-          0,
+-          87,
+-          69,
+-          66,
+-          80,
+-        ]);
++    return WhatsAppExportResult(
++      stagingPath: packDir.path,
++      stickerCount: stickerPaths.length,
++      identifier: identifier,
++    );
++  }
++
++  void _validateStickers(List<String> paths) {
++    for (var i = 0; i < paths.length; i++) {
++      final problem = WhatsAppStickerValidator.checkSticker(paths[i]);
++      if (problem != null) {
++        throw WhatsAppExportException('Stiker ke-${i + 1}: $problem');
+       }
+-      stickerEntries.add({
+-        'image_file': fileName,
+-        'emojis': emojis.isNotEmpty ? emojis : ['😀'],
+-      });
+     }
++  }
++
++  List<Map<String, dynamic>> _copyStickers(
++    Directory packDir,
++    List<String> paths,
++    List<String> emojis,
++  ) {
++    return [
++      for (var i = 0; i < paths.length; i++)
++        _copyOne(packDir, paths[i], i, emojis),
++    ];
++  }
++
++  Map<String, dynamic> _copyOne(
++    Directory packDir,
++    String source,
++    int index,
++    List<String> emojis,
++  ) {
++    final fileName = '${(index + 1).toString().padLeft(2, '0')}.webp';
++    File(source).copySync('${packDir.path}/$fileName');
++    return {
++      'image_file': fileName,
++      'emojis': emojis.isNotEmpty ? emojis : ['😀'],
++    };
++  }
+ 
+-    // Write metadata.json
++  void _writeMetadata(
++    Directory packDir,
++    String identifier,
++    String name,
++    String author,
++    List<Map<String, dynamic>> stickers,
++  ) {
+     final meta = {
+       'android_play_store_link': '',
+       'ios_app_store_link': '',
+@@ -97,25 +119,17 @@ class WhatsAppStagingExporter {
+         {
+           'identifier': identifier,
+           'name': name,
+-          'publisher': author,
+-          'tray_image_file': 'tray.webp',
+-          'image_data_version': '1',
++          'publisher': author.trim().isEmpty ? 'Sticker Studio' : author,
++          'tray_image_file': trayFileName,
++          'image_data_version': DateTime.now().millisecondsSinceEpoch.toString(),
+           'avoid_cache': false,
+           'animated_sticker_pack': false,
+-          'stickers': stickerEntries,
++          'stickers': stickers,
+         },
+       ],
+     };
+-
+-    final metaFile = File('${packDir.path}/metadata.json');
+-    metaFile.writeAsStringSync(
++    File('${packDir.path}/metadata.json').writeAsStringSync(
+       const JsonEncoder.withIndent('  ').convert(meta),
+     );
+-
+-    return WhatsAppExportResult(
+-      stagingPath: packDir.path,
+-      stickerCount: stickerPaths.length,
+-      identifier: identifier,
+-    );
+   }
+ }
+diff --git a/lib/features/data/whatsapp/whatsapp_sticker_validator.dart b/lib/features/data/whatsapp/whatsapp_sticker_validator.dart
+new file mode 100644
+index 0000000..81c34b6
+--- /dev/null
++++ b/lib/features/data/whatsapp/whatsapp_sticker_validator.dart
+@@ -0,0 +1,35 @@
++import 'dart:io';
++
++/// Validasi file stiker sebelum diserahkan ke WhatsApp.
++/// WhatsApp menolak seluruh pack bila satu stiker tidak memenuhi syarat.
++class WhatsAppStickerValidator {
++  const WhatsAppStickerValidator._();
++
++  static const int maxStickerBytes = 100 * 1024;
++  static const int maxTrayBytes = 50 * 1024;
++
++  /// Mengembalikan pesan kesalahan, atau `null` bila file valid.
++  static String? checkSticker(String path) {
++    final file = File(path);
++    if (path.isEmpty || !file.existsSync()) {
++      return 'File stiker tidak ditemukan';
++    }
++    if (file.lengthSync() > maxStickerBytes) {
++      return 'Stiker melebihi 100 KB';
++    }
++    return _isWebp(file) ? null : 'Stiker bukan format WebP';
++  }
++
++  static bool _isWebp(File file) {
++    final raf = file.openSync();
++    try {
++      final head = raf.readSync(12);
++      if (head.length < 12) return false;
++      final riff = String.fromCharCodes(head.sublist(0, 4));
++      final webp = String.fromCharCodes(head.sublist(8, 12));
++      return riff == 'RIFF' && webp == 'WEBP';
++    } finally {
++      raf.closeSync();
++    }
++  }
++}
+diff --git a/lib/features/editor/presentation/brush_input_layer.dart b/lib/features/editor/presentation/brush_input_layer.dart
+new file mode 100644
+index 0000000..d2c53c7
+--- /dev/null
++++ b/lib/features/editor/presentation/brush_input_layer.dart
+@@ -0,0 +1,54 @@
++import 'package:flutter/material.dart';
++
++/// Input kuas tanpa slop gesture: coretan mulai tepat di titik sentuh.
++/// Hanya satu jari yang dipakai; jari tambahan diabaikan.
++class BrushInputLayer extends StatefulWidget {
++  const BrushInputLayer({
++    super.key,
++    required this.factor,
++    required this.onStart,
++    required this.onMove,
++    required this.onEnd,
++    required this.child,
++  });
++
++  /// Pengali dari piksel layar ke koordinat kanvas (mis. 512 / lebar layar).
++  final double factor;
++  final ValueChanged<Offset> onStart;
++  final ValueChanged<Offset> onMove;
++  final VoidCallback onEnd;
++  final Widget child;
++
++  @override
++  State<BrushInputLayer> createState() => _BrushInputLayerState();
++}
++
++class _BrushInputLayerState extends State<BrushInputLayer> {
++  int? _pointer;
++
++  void _finish(PointerEvent event) {
++    if (event.pointer != _pointer) return;
++    _pointer = null;
++    widget.onEnd();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return Listener(
++      behavior: HitTestBehavior.opaque,
++      onPointerDown: (event) {
++        if (_pointer != null) return;
++        _pointer = event.pointer;
++        widget.onStart(event.localPosition * widget.factor);
++      },
++      onPointerMove: (event) {
++        if (event.pointer == _pointer) {
++          widget.onMove(event.localPosition * widget.factor);
++        }
++      },
++      onPointerUp: _finish,
++      onPointerCancel: _finish,
++      child: widget.child,
++    );
++  }
++}
+diff --git a/lib/features/editor/presentation/editor_canvas.dart b/lib/features/editor/presentation/editor_canvas.dart
+index 23fdc1f..595e504 100644
+--- a/lib/features/editor/presentation/editor_canvas.dart
++++ b/lib/features/editor/presentation/editor_canvas.dart
+@@ -8,6 +8,8 @@ import 'package:sticker_studio/core/theme/app_spacing.dart';
+ import '../domain/drawing_layer.dart';
+ import '../domain/scene_layer.dart';
+ import '../domain/scene_project.dart';
++import 'brush_input_layer.dart';
++import 'layer_gesture_layer.dart';
+ import 'scene_painter.dart';
+ 
+ /// Area kanvas editor dengan manipulasi layer & goresan kuas.
+@@ -40,8 +42,6 @@ class EditorCanvas extends StatefulWidget {
+ }
+ 
+ class _EditorCanvasState extends State<EditorCanvas> {
+-  Offset _startFocal = Offset.zero;
+-  LayerTransform _startTransform = const LayerTransform();
+   final Map<String, ui.Image> _imageCache = {};
+   final Set<String> _loading = {};
+   List<DrawingPoint> _currentStroke = [];
+@@ -88,10 +88,35 @@ class _EditorCanvasState extends State<EditorCanvas> {
+     }
+   }
+ 
++  void _endStroke() {
++    if (_currentStroke.isEmpty) return;
++    final double cx = widget.project.canvasWidth / 2;
++    final double cy = widget.project.canvasHeight / 2;
++    // Titik disimpan relatif ke pusat layer agar tidak bergeser saat dirender.
++    final List<DrawingPoint> relative = [
++      for (final p in _currentStroke) DrawingPoint(p.x - cx, p.y - cy),
++    ];
++    if (relative.length == 1) relative.add(relative.first);
++    widget.onAddDrawingLayer?.call(
++      DrawingLayer(
++        id: 'brush-${DateTime.now().millisecondsSinceEpoch}',
++        color: widget.brushColor,
++        strokeWidth: widget.brushSize,
++        transform: LayerTransform(x: cx, y: cy),
++        points: List.unmodifiable(relative),
++      ),
++    );
++    setState(() => _currentStroke = []);
++  }
++
++  void _addPoint(Offset point) {
++    setState(() => _currentStroke = [..._currentStroke, DrawingPoint(point.dx, point.dy)]);
++  }
++
+   @override
+   Widget build(BuildContext context) {
+     final colors = context.colors;
+-    final activeLayer = widget.project.layers
++    final SceneLayer? activeLayer = widget.project.layers
+         .where((l) => l.id == widget.activeLayerId)
+         .firstOrNull;
+ 
+@@ -102,87 +127,48 @@ class _EditorCanvasState extends State<EditorCanvas> {
+           margin: const EdgeInsets.all(AppSpacing.s4),
+           decoration: BoxDecoration(
+             color: colors.glassFill,
+-            borderRadius: AppRadius.card,
++            borderRadius: AppRadius.control,
+             border: Border.all(color: colors.glassBorder),
+             boxShadow: AppShadows.glass,
+           ),
+           child: ClipRRect(
+-            borderRadius: AppRadius.card,
++            borderRadius: AppRadius.control,
+             child: LayoutBuilder(
+               builder: (context, constraints) {
+-                final side = constraints.maxWidth;
+-                final factor = widget.project.canvasWidth / side;
+-
+-                return GestureDetector(
+-                  onTapUp: (details) {
+-                    if (widget.isBrushActive) return;
+-                    final local = details.localPosition * factor;
+-                    for (final layer in widget.project.layers.reversed) {
+-                      if (!layer.visible) continue;
+-                      final dx = (local.dx - layer.transform.x).abs();
+-                      final dy = (local.dy - layer.transform.y).abs();
+-                      final extent = 120.0 * layer.transform.scale;
+-                      if (dx <= extent && dy <= extent) {
+-                        widget.onSelectLayer(layer.id);
+-                        return;
+-                      }
+-                    }
+-                  },
+-                  onScaleStart: (details) {
+-                    if (widget.isBrushActive) {
+-                      final pt = details.localFocalPoint * factor;
+-                      setState(() {
+-                        _currentStroke = [DrawingPoint(pt.dx, pt.dy)];
+-                      });
+-                    } else if (activeLayer != null) {
+-                      _startFocal = details.localFocalPoint;
+-                      _startTransform = activeLayer.transform;
+-                    }
+-                  },
+-                  onScaleUpdate: (details) {
+-                    if (widget.isBrushActive) {
+-                      final pt = details.localFocalPoint * factor;
+-                      setState(() {
+-                        _currentStroke.add(DrawingPoint(pt.dx, pt.dy));
+-                      });
+-                    } else if (activeLayer != null) {
+-                      final delta = details.localFocalPoint - _startFocal;
+-                      final next = _startTransform.copyWith(
+-                        x: _startTransform.x + delta.dx * factor,
+-                        y: _startTransform.y + delta.dy * factor,
+-                        scale: (_startTransform.scale * details.scale).clamp(
+-                          0.2,
+-                          5.0,
+-                        ),
+-                        rotation: _startTransform.rotation + details.rotation,
+-                      );
+-                      widget.onTransformLayer(activeLayer.id, next);
+-                    }
+-                  },
+-                  onScaleEnd: (details) {
+-                    if (widget.isBrushActive && _currentStroke.isNotEmpty) {
+-                      final stroke = DrawingLayer(
+-                        id: 'brush-${DateTime.now().millisecondsSinceEpoch}',
+-                        color: widget.brushColor,
+-                        strokeWidth: widget.brushSize,
+-                        points: List.unmodifiable(_currentStroke),
+-                      );
+-                      widget.onAddDrawingLayer?.call(stroke);
+-                      setState(() => _currentStroke = []);
+-                    }
+-                  },
+-                  child: CustomPaint(
+-                    painter: ScenePainter(
+-                      project: widget.project,
+-                      activeLayerId: widget.activeLayerId,
+-                      colors: colors,
+-                      images: _imageCache,
+-                      activeStroke: _currentStroke,
+-                      activeStrokeColor: widget.brushColor,
+-                      activeStrokeWidth: widget.brushSize,
+-                    ),
+-                    child: const SizedBox.expand(),
++                final double factor =
++                    widget.project.canvasWidth / constraints.maxWidth;
++                final Widget canvas = CustomPaint(
++                  painter: ScenePainter(
++                    project: widget.project,
++                    activeLayerId: widget.activeLayerId,
++                    colors: colors,
++                    images: _imageCache,
++                    activeStroke: _currentStroke,
++                    activeStrokeColor: widget.brushColor,
++                    activeStrokeWidth: widget.brushSize,
++                    showSelection: !widget.isBrushActive,
+                   ),
++                  child: const SizedBox.expand(),
++                );
++                if (widget.isBrushActive) {
++                  return BrushInputLayer(
++                    factor: factor,
++                    onStart: (point) => setState(
++                      () => _currentStroke = [DrawingPoint(point.dx, point.dy)],
++                    ),
++                    onMove: _addPoint,
++                    onEnd: _endStroke,
++                    child: canvas,
++                  );
++                }
++                return LayerGestureLayer(
++                  project: widget.project,
++                  activeLayer: activeLayer,
++                  images: _imageCache,
++                  factor: factor,
++                  onSelectLayer: widget.onSelectLayer,
++                  onTransformLayer: widget.onTransformLayer,
++                  child: canvas,
+                 );
+               },
+             ),
+diff --git a/lib/features/editor/presentation/layer_bounds.dart b/lib/features/editor/presentation/layer_bounds.dart
+new file mode 100644
+index 0000000..6809a09
+--- /dev/null
++++ b/lib/features/editor/presentation/layer_bounds.dart
+@@ -0,0 +1,81 @@
++import 'dart:math' as math;
++import 'dart:ui' as ui;
++
++import 'package:flutter/material.dart';
++
++import '../domain/drawing_layer.dart';
++import '../domain/scene_layer.dart';
++import '../domain/text_layer.dart';
++
++const double _imageBox = 440;
++const double _fallbackBox = 220;
++
++/// Ukuran target gambar di kanvas (sisi terpanjang 440 px, rasio dijaga).
++Size imageTargetSize(ui.Image image) {
++  final double aspect = image.width / (image.height == 0 ? 1 : image.height);
++  return aspect >= 1
++      ? Size(_imageBox, _imageBox / aspect)
++      : Size(_imageBox * aspect, _imageBox);
++}
++
++TextPainter layoutText(TextLayer layer, [Color? color]) {
++  return TextPainter(
++    text: TextSpan(
++      text: layer.text,
++      style: TextStyle(
++        fontSize: layer.fontSize,
++        fontFamily: layer.fontFamily,
++        fontWeight: FontWeight.bold,
++        color: color,
++      ),
++    ),
++    textDirection: TextDirection.ltr,
++  )..layout();
++}
++
++/// Kotak pembatas layer di ruang lokalnya (pusat layer = titik 0,0).
++Rect layerBounds(SceneLayer layer, Map<String, ui.Image> images) {
++  if (layer is ImageLayer) {
++    final ui.Image? image = images[layer.imagePath];
++    final Size size = image == null
++        ? const Size(_fallbackBox, _fallbackBox)
++        : imageTargetSize(image);
++    return Rect.fromCenter(center: Offset.zero, width: size.width, height: size.height);
++  }
++  if (layer is TextLayer) {
++    final TextPainter painter = layoutText(layer);
++    return Rect.fromCenter(
++      center: Offset.zero,
++      width: painter.width,
++      height: painter.height,
++    );
++  }
++  if (layer is DrawingLayer && layer.points.isNotEmpty) {
++    return _strokeBounds(layer);
++  }
++  return Rect.fromCenter(center: Offset.zero, width: 240, height: 240);
++}
++
++Rect _strokeBounds(DrawingLayer layer) {
++  var minX = double.infinity, minY = double.infinity;
++  var maxX = -double.infinity, maxY = -double.infinity;
++  for (final DrawingPoint p in layer.points) {
++    minX = math.min(minX, p.x);
++    minY = math.min(minY, p.y);
++    maxX = math.max(maxX, p.x);
++    maxY = math.max(maxY, p.y);
++  }
++  return Rect.fromLTRB(minX, minY, maxX, maxY).inflate(layer.strokeWidth / 2);
++}
++
++/// Apakah titik kanvas [point] mengenai [layer] (memperhitungkan rotasi/skala).
++bool hitLayer(SceneLayer layer, Offset point, Map<String, ui.Image> images) {
++  final LayerTransform t = layer.transform;
++  final Offset shifted = point - Offset(t.x, t.y);
++  final double cos = math.cos(-t.rotation), sin = math.sin(-t.rotation);
++  final Offset local = Offset(
++    (shifted.dx * cos - shifted.dy * sin) / t.scale,
++    (shifted.dx * sin + shifted.dy * cos) / t.scale,
++  );
++  return layerBounds(layer, images).inflate(12 / t.scale).contains(local);
++}
+diff --git a/lib/features/editor/presentation/layer_gesture_layer.dart b/lib/features/editor/presentation/layer_gesture_layer.dart
+new file mode 100644
+index 0000000..6304ca5
+--- /dev/null
++++ b/lib/features/editor/presentation/layer_gesture_layer.dart
+@@ -0,0 +1,75 @@
++import 'dart:ui' as ui;
++
++import 'package:flutter/material.dart';
++
++import '../domain/scene_layer.dart';
++import '../domain/scene_project.dart';
++import 'layer_bounds.dart';
++
++/// Gestur pilih (tap), geser, cubit-skala, dan putar untuk layer aktif.
++class LayerGestureLayer extends StatefulWidget {
++  const LayerGestureLayer({
++    super.key,
++    required this.project,
++    required this.activeLayer,
++    required this.images,
++    required this.factor,
++    required this.onSelectLayer,
++    required this.onTransformLayer,
++    required this.child,
++  });
++
++  final SceneProject project;
++  final SceneLayer? activeLayer;
++  final Map<String, ui.Image> images;
++  final double factor;
++  final ValueChanged<String?> onSelectLayer;
++  final void Function(String id, LayerTransform transform) onTransformLayer;
++  final Widget child;
++
++  @override
++  State<LayerGestureLayer> createState() => _LayerGestureLayerState();
++}
++
++class _LayerGestureLayerState extends State<LayerGestureLayer> {
++  Offset _startFocal = Offset.zero;
++  LayerTransform _startTransform = const LayerTransform();
++
++  void _select(Offset canvasPoint) {
++    for (final SceneLayer layer in widget.project.layers.reversed) {
++      if (layer.visible && hitLayer(layer, canvasPoint, widget.images)) {
++        widget.onSelectLayer(layer.id);
++        return;
++      }
++    }
++    widget.onSelectLayer(null);
++  }
++
++  void _update(ScaleUpdateDetails details) {
++    final SceneLayer? layer = widget.activeLayer;
++    if (layer == null) return;
++    final Offset delta = details.localFocalPoint - _startFocal;
++    widget.onTransformLayer(
++      layer.id,
++      _startTransform.copyWith(
++        x: _startTransform.x + delta.dx * widget.factor,
++        y: _startTransform.y + delta.dy * widget.factor,
++        scale: (_startTransform.scale * details.scale).clamp(0.2, 5.0),
++        rotation: _startTransform.rotation + details.rotation,
++      ),
++    );
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return GestureDetector(
++      onTapUp: (details) => _select(details.localPosition * widget.factor),
++      onScaleStart: (details) {
++        _startFocal = details.localFocalPoint;
++        _startTransform = widget.activeLayer?.transform ?? const LayerTransform();
++      },
++      onScaleUpdate: _update,
++      child: widget.child,
++    );
++  }
++}
+diff --git a/lib/features/editor/presentation/scene_painter.dart b/lib/features/editor/presentation/scene_painter.dart
+index 4897060..45f28a7 100644
+--- a/lib/features/editor/presentation/scene_painter.dart
++++ b/lib/features/editor/presentation/scene_painter.dart
+@@ -7,6 +7,7 @@ import '../domain/drawing_layer.dart';
+ import '../domain/scene_layer.dart';
+ import '../domain/scene_project.dart';
+ import '../domain/text_layer.dart';
++import 'layer_bounds.dart';
+ 
+ /// Painter kanvas scene editor untuk layer teks, gambar, dan coretan.
+ class ScenePainter extends CustomPainter {
+@@ -19,6 +20,7 @@ class ScenePainter extends CustomPainter {
+     this.activeStrokeColor = '#ff6b00',
+     this.activeStrokeWidth = 6.0,
+     this.isExporting = false,
++    this.showSelection = true,
+   });
+ 
+   final SceneProject project;
+@@ -29,6 +31,7 @@ class ScenePainter extends CustomPainter {
+   final String activeStrokeColor;
+   final double activeStrokeWidth;
+   final bool isExporting;
++  final bool showSelection;
+ 
+   @override
+   void paint(Canvas canvas, Size size) {
+@@ -55,8 +58,8 @@ class ScenePainter extends CustomPainter {
+         _drawStroke(canvas, layer);
+       }
+ 
+-      if (layer.id == activeLayerId) {
+-        _drawSelectionBox(canvas);
++      if (showSelection && !isExporting && layer.id == activeLayerId) {
++        _drawSelectionBox(canvas, layer);
+       }
+       canvas.restore();
+     }
+@@ -136,14 +139,11 @@ class ScenePainter extends CustomPainter {
+         image.width.toDouble(),
+         image.height.toDouble(),
+       );
+-      final double aspect =
+-          image.width / (image.height == 0 ? 1 : image.height);
+-      final double targetW = aspect >= 1.0 ? 440.0 : 440.0 * aspect;
+-      final double targetH = aspect >= 1.0 ? 440.0 / aspect : 440.0;
++      final Size target = imageTargetSize(image);
+       final dst = Rect.fromCenter(
+         center: Offset.zero,
+-        width: targetW,
+-        height: targetH,
++        width: target.width,
++        height: target.height,
+       );
+       canvas.drawImageRect(
+         image,
+@@ -237,15 +237,13 @@ class ScenePainter extends CustomPainter {
+     canvas.drawPath(path, paint);
+   }
+ 
+-  void _drawSelectionBox(Canvas canvas) {
++  void _drawSelectionBox(Canvas canvas, SceneLayer layer) {
++    // Bingkai mengikuti ukuran konten layer, tipis dan tidak ikut diskalakan.
+     final Paint borderPaint = Paint()
+-      ..color = colors.accent
++      ..color = colors.accent.withValues(alpha: 0.85)
+       ..style = PaintingStyle.stroke
+-      ..strokeWidth = 2;
+-    canvas.drawRect(
+-      Rect.fromCenter(center: Offset.zero, width: 240, height: 240),
+-      borderPaint,
+-    );
++      ..strokeWidth = 1.5 / layer.transform.scale;
++    canvas.drawRect(layerBounds(layer, images).inflate(4), borderPaint);
+   }
+ 
+   @override
+diff --git a/lib/features/packs/presentation/whatsapp_publisher.dart b/lib/features/packs/presentation/whatsapp_publisher.dart
+index dad3c84..2d578ec 100644
+--- a/lib/features/packs/presentation/whatsapp_publisher.dart
++++ b/lib/features/packs/presentation/whatsapp_publisher.dart
+@@ -37,13 +37,9 @@ class WhatsAppPublisher {
+         identifier: state.pack!.id,
+         name: state.pack!.name,
+         author: state.pack!.author,
+-        stickerPaths: state.stickers
+-            .map((s) => '/app_data/stickers/${s.id}.webp')
+-            .toList(),
++        stickerPaths: [for (final s in state.stickers) s.filePath ?? ''],
+         emojis: state.emojiTags,
+-        trayIconPath: state.stickers.firstOrNull != null
+-            ? '/app_data/stickers/${state.stickers.first.id}.webp'
+-            : null,
++        trayIconPath: state.stickers.firstOrNull?.filePath,
+       );
+ 
+       final added = await channel.addStickerPack(
+@@ -63,8 +59,11 @@ class WhatsAppPublisher {
+       }
+     } on Object catch (e) {
+       messenger.showSnackBar(
+-        SnackBar(content: Text('Gagal ekspor WhatsApp: $e')),
++        SnackBar(content: Text('Gagal menambahkan ke WhatsApp: ${_reason(e)}')),
+       );
+     }
+   }
++
++  static String _reason(Object error) =>
++      error is StateError ? error.message : error.toString();
+ }
+diff --git a/lib/features/queue/data/drift_queue_repository.dart b/lib/features/queue/data/drift_queue_repository.dart
+index 2cc1b55..343fbae 100644
+--- a/lib/features/queue/data/drift_queue_repository.dart
++++ b/lib/features/queue/data/drift_queue_repository.dart
+@@ -25,7 +25,7 @@ class DriftQueueRepository implements QueueRepository {
+               (row) => OrderingTerm.asc(row.id),
+             ]))
+             .get();
+-    return rows.map(_toQueueItem).toList();
++    return _withThumbnails(rows);
+   }
+ 
+   @override
+@@ -35,7 +35,7 @@ class DriftQueueRepository implements QueueRepository {
+           (row) => OrderingTerm.asc(row.id),
+         ]))
+         .watch()
+-        .map((rows) => rows.map(_toQueueItem).toList());
++        .asyncMap(_withThumbnails);
+   }
+ 
+   @override
+@@ -62,7 +62,29 @@ class DriftQueueRepository implements QueueRepository {
+     return _settings.setBool(autoRmbgSettingKey, enabled);
+   }
+ 
+-  QueueItem _toQueueItem(ImportQueueEntry entry) {
++  /// Entri selesai memakai file stiker hasil impor (id sama dengan id stiker);
++  /// entri lain memakai file sumber agar tetap ada pratinjau.
++  Future<List<QueueItem>> _withThumbnails(List<ImportQueueEntry> rows) async {
++    final doneIds = [
++      for (final row in rows)
++        if (row.status == ImportStatus.done) row.id,
++    ];
++    final Map<String, String> stickerPaths = {};
++    if (doneIds.isNotEmpty) {
++      final stickers = await (_database.select(
++        _database.stickers,
++      )..where((t) => t.id.isIn(doneIds))).get();
++      for (final sticker in stickers) {
++        stickerPaths[sticker.id] = sticker.filePath;
++      }
++    }
++    return [
++      for (final row in rows)
++        _toQueueItem(row, stickerPaths[row.id] ?? row.localInputPath),
++    ];
++  }
++
++  QueueItem _toQueueItem(ImportQueueEntry entry, String? thumbnailPath) {
+     return QueueItem(
+       id: entry.id,
+       title: _titleFor(entry),
+@@ -71,6 +93,7 @@ class DriftQueueRepository implements QueueRepository {
+       sourceType: _sourceFor(entry.sourceType),
+       sourceUrl: entry.sourceUrl,
+       errorMessage: entry.errorMessage,
++      thumbnailPath: thumbnailPath,
+     );
+   }
+ 
+diff --git a/lib/features/queue/domain/queue_item.dart b/lib/features/queue/domain/queue_item.dart
+index b2d12ca..13612c1 100644
+--- a/lib/features/queue/domain/queue_item.dart
++++ b/lib/features/queue/domain/queue_item.dart
+@@ -19,6 +19,7 @@ class QueueItem {
+     required this.sourceType,
+     this.sourceUrl,
+     this.errorMessage,
++    this.thumbnailPath,
+   });
+ 
+   final String id;
+@@ -29,6 +30,9 @@ class QueueItem {
+   final String? sourceUrl;
+   final String? errorMessage;
+ 
++  /// Stiker hasil impor (status selesai) atau file sumber (masih diproses).
++  final String? thumbnailPath;
++
+   QueueItem copyWith({QueueStatus? status, int? progress}) => QueueItem(
+     id: id,
+     title: title,
+@@ -37,6 +41,7 @@ class QueueItem {
+     sourceType: sourceType,
+     sourceUrl: sourceUrl,
+     errorMessage: errorMessage,
++    thumbnailPath: thumbnailPath,
+   );
+ }
+ 
+diff --git a/lib/features/queue/presentation/queue_card.dart b/lib/features/queue/presentation/queue_card.dart
+index 238b362..14778c1 100644
+--- a/lib/features/queue/presentation/queue_card.dart
++++ b/lib/features/queue/presentation/queue_card.dart
+@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
+ import '../../../core/widgets/glass/glass_card.dart';
+ import '../../../core/theme/app_spacing.dart';
+ import '../../../core/widgets/app_icon.dart';
++import '../../../core/widgets/file_thumbnail.dart';
+ import '../../../core/widgets/sticker_art.dart';
+ import '../domain/queue_item.dart';
+ import 'queue_source.dart';
+@@ -20,10 +21,13 @@ class QueueCard extends StatelessWidget {
+     final AppColors colors = context.colors;
+     return GlassCard(blur: false, margin: const EdgeInsets.only(bottom: AppSpacing.s3), padding: const EdgeInsets.all(AppSpacing.s4), child: Row(
+         children: [
+-          StickerArt(
+-            color: colors.stickerLavender,
+-            label: item.title,
+-            small: true,
++          FileThumbnail(
++            path: item.thumbnailPath,
++            fallback: StickerArt(
++              color: colors.stickerLavender,
++              label: item.title,
++              small: true,
++            ),
+           ),
+           const SizedBox(width: AppSpacing.s3),
+           Expanded(
+diff --git a/test/data/pack/drift_pack_editor_adapter_test.dart b/test/data/pack/drift_pack_editor_adapter_test.dart
+index 93db10d..216115f 100644
+--- a/test/data/pack/drift_pack_editor_adapter_test.dart
++++ b/test/data/pack/drift_pack_editor_adapter_test.dart
+@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ import 'package:path/path.dart' as p;
+ import 'package:sticker_studio/features/data/app_database.dart' hide Sticker;
++import 'package:sticker_studio/features/data/database/database_enums.dart';
+ import 'package:sticker_studio/features/data/pack/drift_pack_editor_adapter.dart';
+ import 'package:sticker_studio/features/library/domain/sticker.dart';
+ import 'package:sticker_studio/features/packs/domain/pack_repository.dart';
+@@ -37,6 +38,40 @@ void main() {
+ 
+     tearDown(() => database.close());
+ 
++    test('fetchPackDetail mengembalikan filePath stiker asli (bukan placeholder)', () async {
++      await database
++          .into(database.stickers)
++          .insert(
++            StickersCompanion.insert(
++              id: 'stk-real',
++              filePath: '/data/stickers/stk-real.webp',
++              thumbPath: '/data/stickers/stk-real.webp',
++              width: 512,
++              height: 512,
++              sizeKb: 40,
++              sha256: 'abc',
++              sourceType: SourceType.manualFile,
++              createdAt: DateTime(2026, 11, 11),
++            ),
++          );
++      final created = await adapter.createPack(
++        name: 'Real Pack',
++        author: 'Budi',
++        stickers: const [
++          Sticker(
++            id: 'stk-real',
++            label: 'x',
++            colorKind: StickerColorKind.mint,
++            shape: StickerShape.blob,
++          ),
++        ],
++      );
++
++      final loaded = await adapter.fetchPackDetail(created.pack.id);
++
++      expect(loaded.stickers.single.filePath, '/data/stickers/stk-real.webp');
++    });
++
+     test('createPack menyimpan pack, stiker, dan emoji tags ke DB', () async {
+       final stickers = _dummyStickers(3);
+       final PackDetail created = await adapter.createPack(
+diff --git a/test/data/whatsapp/whatsapp_staging_exporter_test.dart b/test/data/whatsapp/whatsapp_staging_exporter_test.dart
+index bfd1177..183f581 100644
+--- a/test/data/whatsapp/whatsapp_staging_exporter_test.dart
++++ b/test/data/whatsapp/whatsapp_staging_exporter_test.dart
+@@ -2,73 +2,104 @@ import 'dart:convert';
+ import 'dart:io';
+ 
+ import 'package:flutter_test/flutter_test.dart';
++import 'package:sticker_studio/features/data/whatsapp/tray_icon_builder.dart';
+ import 'package:sticker_studio/features/data/whatsapp/whatsapp_staging_exporter.dart';
+ 
++class _FakeTrayBuilder extends TrayIconBuilder {
++  const _FakeTrayBuilder();
++
++  @override
++  Future<void> build({
++    required String sourcePath,
++    required String outputPath,
++  }) async {
++    File(outputPath).writeAsBytesSync(const [1, 2, 3]);
++  }
++}
++
++/// Header RIFF....WEBP minimal: cukup untuk lolos validasi format.
++List<int> _webpBytes() => [
++  ...'RIFF'.codeUnits,
++  0, 0, 0, 0,
++  ...'WEBP'.codeUnits,
++  0, 0, 0, 0,
++];
++
+ void main() {
+   late Directory tempDir;
++  const exporter = WhatsAppStagingExporter(trayIconBuilder: _FakeTrayBuilder());
+ 
+-  setUp(() {
+-    tempDir = Directory.systemTemp.createTempSync('wa_staging_test_');
+-  });
++  List<String> makeStickers(int count) => [
++    for (var i = 0; i < count; i++)
++      (File('${tempDir.path}/src$i.webp')..writeAsBytesSync(_webpBytes())).path,
++  ];
+ 
+-  tearDown(() {
+-    if (tempDir.existsSync()) {
+-      tempDir.deleteSync(recursive: true);
+-    }
+-  });
++  setUp(() => tempDir = Directory.systemTemp.createTempSync('wa_staging_'));
++  tearDown(() => tempDir.deleteSync(recursive: true));
+ 
+-  test('WhatsAppStagingExporter menolak kurang dari 3 stiker', () async {
+-    const exporter = WhatsAppStagingExporter();
++  test('menolak kurang dari 3 stiker', () {
+     expect(
+       () => exporter.exportPack(
+         stagingBaseDir: tempDir.path,
+         identifier: 'pack-1',
+         name: 'Pack Test',
+         author: 'Author',
+-        stickerPaths: ['/tmp/s1.webp', '/tmp/s2.webp'],
++        stickerPaths: makeStickers(2),
+       ),
+       throwsArgumentError,
+     );
+   });
+ 
+-  test(
+-    'WhatsAppStagingExporter berhasil mengekspor pack 3 stiker & metadata.json',
+-    () async {
+-      const exporter = WhatsAppStagingExporter();
+-      final res = await exporter.exportPack(
++  test('menolak stiker yang filenya tidak ada, bukan membuat file palsu', () {
++    expect(
++      () => exporter.exportPack(
+         stagingBaseDir: tempDir.path,
+         identifier: 'pack-1',
+         name: 'Pack Test',
+-        author: 'Author Test',
+-        stickerPaths: ['/tmp/s1.webp', '/tmp/s2.webp', '/tmp/s3.webp'],
+-        emojis: ['🔥', '👍'],
+-      );
+-
+-      expect(res.stickerCount, 3);
+-      expect(res.identifier, 'pack-1');
+-
+-      final dir = Directory(res.stagingPath);
+-      expect(dir.existsSync(), isTrue);
+-
+-      final metaFile = File('${dir.path}/metadata.json');
+-      expect(metaFile.existsSync(), isTrue);
++        author: 'Author',
++        stickerPaths: ['/tidak/ada/1.webp', ...makeStickers(2)],
++      ),
++      throwsA(isA<WhatsAppExportException>()),
++    );
++  });
+ 
+-      final meta =
+-          jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+-      final packs = meta['sticker_packs'] as List<dynamic>;
+-      expect(packs.length, 1);
+-      expect(packs.first['identifier'], 'pack-1');
+-      expect(packs.first['name'], 'Pack Test');
+-      expect(packs.first['publisher'], 'Author Test');
++  test('menolak file yang bukan WebP', () {
++    final fake = File('${tempDir.path}/fake.webp')..writeAsStringSync('bukan webp');
++    expect(
++      () => exporter.exportPack(
++        stagingBaseDir: tempDir.path,
++        identifier: 'pack-1',
++        name: 'Pack Test',
++        author: 'Author',
++        stickerPaths: [fake.path, ...makeStickers(2)],
++      ),
++      throwsA(isA<WhatsAppExportException>()),
++    );
++  });
+ 
+-      final stickers = packs.first['stickers'] as List<dynamic>;
+-      expect(stickers.length, 3);
+-      expect(stickers.first['image_file'], '01.webp');
++  test('mengekspor 3 stiker, tray.png, dan metadata.json', () async {
++    final res = await exporter.exportPack(
++      stagingBaseDir: tempDir.path,
++      identifier: 'pack-1',
++      name: 'Pack Test',
++      author: 'Author Test',
++      stickerPaths: makeStickers(3),
++      emojis: ['🔥', '👍'],
++    );
+ 
+-      expect(File('${dir.path}/tray.webp').existsSync(), isTrue);
+-      expect(File('${dir.path}/01.webp').existsSync(), isTrue);
+-      expect(File('${dir.path}/02.webp').existsSync(), isTrue);
+-      expect(File('${dir.path}/03.webp').existsSync(), isTrue);
+-    },
+-  );
++    expect(res.stickerCount, 3);
++    final dir = Directory(res.stagingPath);
++    final meta =
++        jsonDecode(File('${dir.path}/metadata.json').readAsStringSync())
++            as Map<String, dynamic>;
++    final pack = (meta['sticker_packs'] as List).first as Map<String, dynamic>;
++    expect(pack['identifier'], 'pack-1');
++    expect(pack['publisher'], 'Author Test');
++    expect(pack['tray_image_file'], 'tray.png');
++    expect((pack['stickers'] as List).first['image_file'], '01.webp');
++    expect(File('${dir.path}/tray.png').existsSync(), isTrue);
++    for (final name in ['01', '02', '03']) {
++      expect(File('${dir.path}/$name.webp').existsSync(), isTrue);
++    }
++  });
+ }
+diff --git a/test/features/editor/layer_bounds_test.dart b/test/features/editor/layer_bounds_test.dart
+new file mode 100644
+index 0000000..5de25ca
+--- /dev/null
++++ b/test/features/editor/layer_bounds_test.dart
+@@ -0,0 +1,34 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:sticker_studio/features/editor/domain/drawing_layer.dart';
++import 'package:sticker_studio/features/editor/domain/scene_layer.dart';
++import 'package:sticker_studio/features/editor/presentation/layer_bounds.dart';
++
++void main() {
++  const stroke = DrawingLayer(
++    id: 'brush-1',
++    strokeWidth: 8,
++    transform: LayerTransform(x: 256, y: 256),
++    points: [DrawingPoint(-40, -20), DrawingPoint(40, 20)],
++  );
++
++  test('bounds coretan mengikuti titik relatif + setengah lebar kuas', () {
++    expect(layerBounds(stroke, const {}), const Rect.fromLTRB(-44, -24, 44, 24));
++  });
++
++  test('hitLayer mengenai coretan di posisi layer, bukan di sudut kanvas', () {
++    expect(hitLayer(stroke, const Offset(256, 256), const {}), isTrue);
++    expect(hitLayer(stroke, const Offset(20, 20), const {}), isFalse);
++  });
++
++  test('hitLayer memperhitungkan rotasi layer', () {
++    final rotated = DrawingLayer(
++      id: 'brush-2',
++      strokeWidth: 4,
++      transform: const LayerTransform(x: 100, y: 100, rotation: 1.5707963),
++      points: const [DrawingPoint(-60, 0), DrawingPoint(60, 0)],
++    );
++    expect(hitLayer(rotated, const Offset(100, 150), const {}), isTrue);
++    expect(hitLayer(rotated, const Offset(160, 100), const {}), isFalse);
++  });
++}

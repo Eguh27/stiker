@@ -25,7 +25,7 @@ class DriftQueueRepository implements QueueRepository {
               (row) => OrderingTerm.asc(row.id),
             ]))
             .get();
-    return rows.map(_toQueueItem).toList();
+    return _withThumbnails(rows);
   }
 
   @override
@@ -35,7 +35,7 @@ class DriftQueueRepository implements QueueRepository {
           (row) => OrderingTerm.asc(row.id),
         ]))
         .watch()
-        .map((rows) => rows.map(_toQueueItem).toList());
+        .asyncMap(_withThumbnails);
   }
 
   @override
@@ -62,7 +62,29 @@ class DriftQueueRepository implements QueueRepository {
     return _settings.setBool(autoRmbgSettingKey, enabled);
   }
 
-  QueueItem _toQueueItem(ImportQueueEntry entry) {
+  /// Entri selesai memakai file stiker hasil impor (id sama dengan id stiker);
+  /// entri lain memakai file sumber agar tetap ada pratinjau.
+  Future<List<QueueItem>> _withThumbnails(List<ImportQueueEntry> rows) async {
+    final doneIds = [
+      for (final row in rows)
+        if (row.status == ImportStatus.done) row.id,
+    ];
+    final Map<String, String> stickerPaths = {};
+    if (doneIds.isNotEmpty) {
+      final stickers = await (_database.select(
+        _database.stickers,
+      )..where((t) => t.id.isIn(doneIds))).get();
+      for (final sticker in stickers) {
+        stickerPaths[sticker.id] = sticker.filePath;
+      }
+    }
+    return [
+      for (final row in rows)
+        _toQueueItem(row, stickerPaths[row.id] ?? row.localInputPath),
+    ];
+  }
+
+  QueueItem _toQueueItem(ImportQueueEntry entry, String? thumbnailPath) {
     return QueueItem(
       id: entry.id,
       title: _titleFor(entry),
@@ -71,6 +93,7 @@ class DriftQueueRepository implements QueueRepository {
       sourceType: _sourceFor(entry.sourceType),
       sourceUrl: entry.sourceUrl,
       errorMessage: entry.errorMessage,
+      thumbnailPath: thumbnailPath,
     );
   }
 

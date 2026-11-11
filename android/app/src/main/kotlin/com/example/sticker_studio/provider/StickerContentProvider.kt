@@ -7,13 +7,16 @@ import android.content.res.AssetFileDescriptor
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
+import android.util.Log
 import android.os.ParcelFileDescriptor
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
 class StickerContentProvider : ContentProvider() {
 
     companion object {
+        private const val TAG = "StickerStudioWA"
         const val AUTHORITY = "com.example.sticker_studio.stickercontentprovider"
         private const val METADATA = 1
         private const val METADATA_PACK = 2
@@ -29,14 +32,15 @@ class StickerContentProvider : ContentProvider() {
 
         private val METADATA_COLUMNS = arrayOf(
             "sticker_pack_identifier", "sticker_pack_name", "sticker_pack_publisher",
-            "sticker_pack_icon", "android_play_store_link", "ios_app_store_link",
-            "publisher_email", "publisher_website", "privacy_policy_website",
-            "license_agreement_website", "image_data_version", "avoid_cache",
-            "animated_sticker_pack"
+            "sticker_pack_icon", "android_play_store_link", "ios_app_download_link",
+            "sticker_pack_publisher_email", "sticker_pack_publisher_website",
+            "sticker_pack_privacy_policy_website",
+            "sticker_pack_license_agreement_website", "image_data_version",
+            "whatsapp_will_not_cache_stickers", "animated_sticker_pack"
         )
 
         private val STICKER_COLUMNS = arrayOf(
-            "sticker_file_name", "sticker_pack_identifier", "sticker_emojis"
+            "sticker_file_name", "sticker_emoji", "sticker_accessibility_text"
         )
     }
 
@@ -85,7 +89,7 @@ class StickerContentProvider : ContentProvider() {
                         id,
                         p.optString("name"),
                         p.optString("publisher"),
-                        p.optString("tray_image_file", "tray.webp"),
+                        p.optString("tray_image_file", "tray.png"),
                         json.optString("android_play_store_link", ""),
                         json.optString("ios_app_store_link", ""),
                         json.optString("publisher_email", ""),
@@ -97,7 +101,9 @@ class StickerContentProvider : ContentProvider() {
                         if (p.optBoolean("animated_sticker_pack", false)) 1 else 0
                     ))
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e(TAG, "metadata.json tidak valid: ${dir.name}", e)
+            }
         }
         return cursor
     }
@@ -118,14 +124,22 @@ class StickerContentProvider : ContentProvider() {
                         val st = stickers.getJSONObject(s)
                         cursor.addRow(arrayOf(
                             st.optString("image_file"),
-                            packId,
-                            st.optJSONArray("emojis")?.toString() ?: "[\"😀\"]"
+                            joinEmojis(st.optJSONArray("emojis")),
+                            st.optString("accessibility_text", "")
                         ))
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal membaca stiker pack $packId", e)
+        }
         return cursor
+    }
+
+    // Format WhatsApp: emoji dipisah koma ("😀,🔥"), bukan array JSON.
+    private fun joinEmojis(emojis: JSONArray?): String {
+        if (emojis == null || emojis.length() == 0) return "😀"
+        return (0 until emojis.length()).joinToString(",") { emojis.getString(it) }
     }
 
     override fun openAssetFile(uri: Uri, mode: String): AssetFileDescriptor? {
@@ -145,9 +159,11 @@ class StickerContentProvider : ContentProvider() {
     }
 
     override fun getType(uri: Uri): String? = when (uriMatcher.match(uri)) {
-        METADATA, METADATA_PACK -> "vnd.android.cursor.dir/vnd.$AUTHORITY.metadata"
+        METADATA -> "vnd.android.cursor.dir/vnd.$AUTHORITY.metadata"
+        METADATA_PACK -> "vnd.android.cursor.item/vnd.$AUTHORITY.metadata"
         STICKERS -> "vnd.android.cursor.dir/vnd.$AUTHORITY.stickers"
-        STICKERS_ASSET -> "image/webp"
+        STICKERS_ASSET ->
+            if (uri.lastPathSegment?.endsWith(".png") == true) "image/png" else "image/webp"
         else -> null
     }
 

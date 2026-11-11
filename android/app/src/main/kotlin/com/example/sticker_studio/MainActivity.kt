@@ -16,6 +16,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WhatsAppIntentHandler.CHANNEL_NAME)
-        channel.setMethodCallHandler(WhatsAppIntentHandler(applicationContext))
+        channel.setMethodCallHandler(WhatsAppIntentHandler(applicationContext) { this })
     }
 }

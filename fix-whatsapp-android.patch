@@ -1,0 +1,193 @@
+diff --git a/android/app/src/main/kotlin/com/example/sticker_studio/MainActivity.kt b/android/app/src/main/kotlin/com/example/sticker_studio/MainActivity.kt
+index 85a0af1..57ad289 100644
+--- a/android/app/src/main/kotlin/com/example/sticker_studio/MainActivity.kt
++++ b/android/app/src/main/kotlin/com/example/sticker_studio/MainActivity.kt
+@@ -16,6 +16,6 @@ class MainActivity : FlutterActivity() {
+     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+         super.configureFlutterEngine(flutterEngine)
+         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WhatsAppIntentHandler.CHANNEL_NAME)
+-        channel.setMethodCallHandler(WhatsAppIntentHandler(applicationContext))
++        channel.setMethodCallHandler(WhatsAppIntentHandler(applicationContext) { this })
+     }
+ }
+diff --git a/android/app/src/main/kotlin/com/example/sticker_studio/provider/StickerContentProvider.kt b/android/app/src/main/kotlin/com/example/sticker_studio/provider/StickerContentProvider.kt
+index 58b8857..e8672c0 100644
+--- a/android/app/src/main/kotlin/com/example/sticker_studio/provider/StickerContentProvider.kt
++++ b/android/app/src/main/kotlin/com/example/sticker_studio/provider/StickerContentProvider.kt
+@@ -7,13 +7,16 @@ import android.content.res.AssetFileDescriptor
+ import android.database.Cursor
+ import android.database.MatrixCursor
+ import android.net.Uri
++import android.util.Log
+ import android.os.ParcelFileDescriptor
++import org.json.JSONArray
+ import org.json.JSONObject
+ import java.io.File
+ 
+ class StickerContentProvider : ContentProvider() {
+ 
+     companion object {
++        private const val TAG = "StickerStudioWA"
+         const val AUTHORITY = "com.example.sticker_studio.stickercontentprovider"
+         private const val METADATA = 1
+         private const val METADATA_PACK = 2
+@@ -29,14 +32,15 @@ class StickerContentProvider : ContentProvider() {
+ 
+         private val METADATA_COLUMNS = arrayOf(
+             "sticker_pack_identifier", "sticker_pack_name", "sticker_pack_publisher",
+-            "sticker_pack_icon", "android_play_store_link", "ios_app_store_link",
+-            "publisher_email", "publisher_website", "privacy_policy_website",
+-            "license_agreement_website", "image_data_version", "avoid_cache",
+-            "animated_sticker_pack"
++            "sticker_pack_icon", "android_play_store_link", "ios_app_download_link",
++            "sticker_pack_publisher_email", "sticker_pack_publisher_website",
++            "sticker_pack_privacy_policy_website",
++            "sticker_pack_license_agreement_website", "image_data_version",
++            "whatsapp_will_not_cache_stickers", "animated_sticker_pack"
+         )
+ 
+         private val STICKER_COLUMNS = arrayOf(
+-            "sticker_file_name", "sticker_pack_identifier", "sticker_emojis"
++            "sticker_file_name", "sticker_emoji", "sticker_accessibility_text"
+         )
+     }
+ 
+@@ -85,7 +89,7 @@ class StickerContentProvider : ContentProvider() {
+                         id,
+                         p.optString("name"),
+                         p.optString("publisher"),
+-                        p.optString("tray_image_file", "tray.webp"),
++                        p.optString("tray_image_file", "tray.png"),
+                         json.optString("android_play_store_link", ""),
+                         json.optString("ios_app_store_link", ""),
+                         json.optString("publisher_email", ""),
+@@ -97,7 +101,9 @@ class StickerContentProvider : ContentProvider() {
+                         if (p.optBoolean("animated_sticker_pack", false)) 1 else 0
+                     ))
+                 }
+-            } catch (_: Exception) {}
++            } catch (e: Exception) {
++                Log.e(TAG, "metadata.json tidak valid: ${dir.name}", e)
++            }
+         }
+         return cursor
+     }
+@@ -118,16 +124,24 @@ class StickerContentProvider : ContentProvider() {
+                         val st = stickers.getJSONObject(s)
+                         cursor.addRow(arrayOf(
+                             st.optString("image_file"),
+-                            packId,
+-                            st.optJSONArray("emojis")?.toString() ?: "[\"😀\"]"
++                            joinEmojis(st.optJSONArray("emojis")),
++                            st.optString("accessibility_text", "")
+                         ))
+                     }
+                 }
+             }
+-        } catch (_: Exception) {}
++        } catch (e: Exception) {
++            Log.e(TAG, "Gagal membaca stiker pack $packId", e)
++        }
+         return cursor
+     }
+ 
++    // Format WhatsApp: emoji dipisah koma ("😀,🔥"), bukan array JSON.
++    private fun joinEmojis(emojis: JSONArray?): String {
++        if (emojis == null || emojis.length() == 0) return "😀"
++        return (0 until emojis.length()).joinToString(",") { emojis.getString(it) }
++    }
++
+     override fun openAssetFile(uri: Uri, mode: String): AssetFileDescriptor? {
+         val context = context ?: return null
+         if (uriMatcher.match(uri) != STICKERS_ASSET) return null
+@@ -145,9 +159,11 @@ class StickerContentProvider : ContentProvider() {
+     }
+ 
+     override fun getType(uri: Uri): String? = when (uriMatcher.match(uri)) {
+-        METADATA, METADATA_PACK -> "vnd.android.cursor.dir/vnd.$AUTHORITY.metadata"
++        METADATA -> "vnd.android.cursor.dir/vnd.$AUTHORITY.metadata"
++        METADATA_PACK -> "vnd.android.cursor.item/vnd.$AUTHORITY.metadata"
+         STICKERS -> "vnd.android.cursor.dir/vnd.$AUTHORITY.stickers"
+-        STICKERS_ASSET -> "image/webp"
++        STICKERS_ASSET ->
++            if (uri.lastPathSegment?.endsWith(".png") == true) "image/png" else "image/webp"
+         else -> null
+     }
+ 
+diff --git a/android/app/src/main/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandler.kt b/android/app/src/main/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandler.kt
+index 2770b83..eafa945 100644
+--- a/android/app/src/main/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandler.kt
++++ b/android/app/src/main/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandler.kt
+@@ -1,20 +1,27 @@
+ package com.example.sticker_studio.whatsapp
+ 
++import android.app.Activity
+ import android.content.Context
++import android.util.Log
+ import android.content.Intent
+ import android.content.pm.PackageManager
+ import io.flutter.plugin.common.MethodCall
+ import io.flutter.plugin.common.MethodChannel
+ import java.io.File
+ 
+-class WhatsAppIntentHandler(private val context: Context) : MethodChannel.MethodCallHandler {
++class WhatsAppIntentHandler(
++    private val context: Context,
++    private val activityProvider: () -> Activity? = { null },
++) : MethodChannel.MethodCallHandler {
+ 
+     companion object {
++        private const val TAG = "StickerStudioWA"
+         const val CHANNEL_NAME = "com.example.sticker_studio/whatsapp"
+         const val ACTION_ENABLE_STICKER_PACK = "com.whatsapp.intent.action.ENABLE_STICKER_PACK"
+-        const val EXTRA_STICKER_PACK_ID = "EXTRA_STICKER_PACK_ID"
+-        const val EXTRA_STICKER_PACK_AUTHORITY = "EXTRA_STICKER_PACK_AUTHORITY"
+-        const val EXTRA_STICKER_PACK_NAME = "EXTRA_STICKER_PACK_NAME"
++        const val EXTRA_STICKER_PACK_ID = "sticker_pack_id"
++        const val EXTRA_STICKER_PACK_AUTHORITY = "sticker_pack_authority"
++        const val EXTRA_STICKER_PACK_NAME = "sticker_pack_name"
++        const val REQUEST_ADD_PACK = 200
+         const val AUTHORITY = "com.example.sticker_studio.stickercontentprovider"
+         const val PACKAGE_WHATSAPP = "com.whatsapp"
+         const val PACKAGE_WHATSAPP_BUSINESS = "com.whatsapp.w4b"
+@@ -48,13 +55,21 @@ class WhatsAppIntentHandler(private val context: Context) : MethodChannel.Method
+                     putExtra(EXTRA_STICKER_PACK_AUTHORITY, AUTHORITY)
+                     putExtra(EXTRA_STICKER_PACK_NAME, name)
+                     setPackage(targetPackage)
+-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                 }
+ 
++                // WhatsApp mengenali pemanggil lewat startActivityForResult;
++                // memakai startActivity biasa membuat permintaan diabaikan.
++                val activity = activityProvider()
++                if (activity == null) {
++                    result.error("NO_ACTIVITY", "Activity tidak tersedia", null)
++                    return
++                }
+                 try {
+-                    context.startActivity(intent)
++                    Log.d(TAG, "ENABLE_STICKER_PACK id=$id authority=$AUTHORITY target=$targetPackage")
++                    activity.startActivityForResult(intent, REQUEST_ADD_PACK)
+                     result.success(true)
+                 } catch (e: Exception) {
++                    Log.e(TAG, "Gagal membuka WhatsApp", e)
+                     result.error("INTENT_FAILED", e.message, null)
+                 }
+             }
+diff --git a/android/app/src/test/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandlerTest.kt b/android/app/src/test/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandlerTest.kt
+index 5f0d054..0740e45 100644
+--- a/android/app/src/test/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandlerTest.kt
++++ b/android/app/src/test/kotlin/com/example/sticker_studio/whatsapp/WhatsAppIntentHandlerTest.kt
+@@ -9,9 +9,9 @@ class WhatsAppIntentHandlerTest {
+     fun constantsMatchWhatsAppSpec() {
+         assertEquals("com.whatsapp.intent.action.ENABLE_STICKER_PACK", WhatsAppIntentHandler.ACTION_ENABLE_STICKER_PACK)
+         assertEquals("com.example.sticker_studio.stickercontentprovider", WhatsAppIntentHandler.AUTHORITY)
+-        assertEquals("EXTRA_STICKER_PACK_ID", WhatsAppIntentHandler.EXTRA_STICKER_PACK_ID)
+-        assertEquals("EXTRA_STICKER_PACK_AUTHORITY", WhatsAppIntentHandler.EXTRA_STICKER_PACK_AUTHORITY)
+-        assertEquals("EXTRA_STICKER_PACK_NAME", WhatsAppIntentHandler.EXTRA_STICKER_PACK_NAME)
++        assertEquals("sticker_pack_id", WhatsAppIntentHandler.EXTRA_STICKER_PACK_ID)
++        assertEquals("sticker_pack_authority", WhatsAppIntentHandler.EXTRA_STICKER_PACK_AUTHORITY)
++        assertEquals("sticker_pack_name", WhatsAppIntentHandler.EXTRA_STICKER_PACK_NAME)
+         assertEquals("com.whatsapp", WhatsAppIntentHandler.PACKAGE_WHATSAPP)
+         assertEquals("com.whatsapp.w4b", WhatsAppIntentHandler.PACKAGE_WHATSAPP_BUSINESS)
+     }

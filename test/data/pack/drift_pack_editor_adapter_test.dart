@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sticker_studio/features/data/app_database.dart' hide Sticker;
+import 'package:sticker_studio/features/data/database/database_enums.dart';
 import 'package:sticker_studio/features/data/pack/drift_pack_editor_adapter.dart';
 import 'package:sticker_studio/features/library/domain/sticker.dart';
 import 'package:sticker_studio/features/packs/domain/pack_repository.dart';
@@ -36,6 +37,40 @@ void main() {
     });
 
     tearDown(() => database.close());
+
+    test('fetchPackDetail mengembalikan filePath stiker asli (bukan placeholder)', () async {
+      await database
+          .into(database.stickers)
+          .insert(
+            StickersCompanion.insert(
+              id: 'stk-real',
+              filePath: '/data/stickers/stk-real.webp',
+              thumbPath: '/data/stickers/stk-real.webp',
+              width: 512,
+              height: 512,
+              sizeKb: 40,
+              sha256: 'abc',
+              sourceType: SourceType.manualFile,
+              createdAt: DateTime(2026, 11, 11),
+            ),
+          );
+      final created = await adapter.createPack(
+        name: 'Real Pack',
+        author: 'Budi',
+        stickers: const [
+          Sticker(
+            id: 'stk-real',
+            label: 'x',
+            colorKind: StickerColorKind.mint,
+            shape: StickerShape.blob,
+          ),
+        ],
+      );
+
+      final loaded = await adapter.fetchPackDetail(created.pack.id);
+
+      expect(loaded.stickers.single.filePath, '/data/stickers/stk-real.webp');
+    });
 
     test('createPack menyimpan pack, stiker, dan emoji tags ke DB', () async {
       final stickers = _dummyStickers(3);

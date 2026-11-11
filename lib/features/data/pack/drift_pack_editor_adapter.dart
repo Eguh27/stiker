@@ -4,6 +4,7 @@ import 'package:sticker_studio/features/library/domain/sticker.dart' as domain;
 import 'package:sticker_studio/features/packs/domain/pack_repository.dart';
 import 'package:sticker_studio/features/packs/domain/sticker_pack.dart';
 
+import '../sticker/sticker_row_mapper.dart';
 import 'pack_details.dart';
 import 'pack_repository_impl.dart';
 
@@ -109,17 +110,9 @@ class DriftPackEditorAdapter implements PackEditorRepository {
       _database.stickers,
     )..where((t) => t.id.isIn(ids))).get();
     final Map<String, Sticker> map = {for (final row in rows) row.id: row};
-    const colors = domain.StickerColorKind.values;
-    const shapes = domain.StickerShape.values;
     return [
-      for (int i = 0; i < ids.length; i++)
-        domain.Sticker(
-          id: ids[i],
-          label: 'Stiker ${i + 1}',
-          colorKind: colors[i % colors.length],
-          shape: shapes[i % shapes.length],
-          sourceLabel: map[ids[i]]?.sourceType.name ?? 'Daily',
-        ),
+      for (final id in ids)
+        map[id] != null ? stickerFromRow(map[id]!) : missingSticker(id),
     ];
   }
 

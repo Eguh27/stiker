@@ -37,13 +37,9 @@ class WhatsAppPublisher {
         identifier: state.pack!.id,
         name: state.pack!.name,
         author: state.pack!.author,
-        stickerPaths: state.stickers
-            .map((s) => '/app_data/stickers/${s.id}.webp')
-            .toList(),
+        stickerPaths: [for (final s in state.stickers) s.filePath ?? ''],
         emojis: state.emojiTags,
-        trayIconPath: state.stickers.firstOrNull != null
-            ? '/app_data/stickers/${state.stickers.first.id}.webp'
-            : null,
+        trayIconPath: state.stickers.firstOrNull?.filePath,
       );
 
       final added = await channel.addStickerPack(
@@ -63,8 +59,11 @@ class WhatsAppPublisher {
       }
     } on Object catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Gagal ekspor WhatsApp: $e')),
+        SnackBar(content: Text('Gagal menambahkan ke WhatsApp: ${_reason(e)}')),
       );
     }
   }
+
+  static String _reason(Object error) =>
+      error is StateError ? error.message : error.toString();
 }

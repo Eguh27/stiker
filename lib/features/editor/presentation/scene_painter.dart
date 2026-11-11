@@ -7,6 +7,7 @@ import '../domain/drawing_layer.dart';
 import '../domain/scene_layer.dart';
 import '../domain/scene_project.dart';
 import '../domain/text_layer.dart';
+import 'layer_bounds.dart';
 
 /// Painter kanvas scene editor untuk layer teks, gambar, dan coretan.
 class ScenePainter extends CustomPainter {
@@ -19,6 +20,7 @@ class ScenePainter extends CustomPainter {
     this.activeStrokeColor = '#ff6b00',
     this.activeStrokeWidth = 6.0,
     this.isExporting = false,
+    this.showSelection = true,
   });
 
   final SceneProject project;
@@ -29,6 +31,7 @@ class ScenePainter extends CustomPainter {
   final String activeStrokeColor;
   final double activeStrokeWidth;
   final bool isExporting;
+  final bool showSelection;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -55,8 +58,8 @@ class ScenePainter extends CustomPainter {
         _drawStroke(canvas, layer);
       }
 
-      if (layer.id == activeLayerId) {
-        _drawSelectionBox(canvas);
+      if (showSelection && !isExporting && layer.id == activeLayerId) {
+        _drawSelectionBox(canvas, layer);
       }
       canvas.restore();
     }
@@ -136,14 +139,11 @@ class ScenePainter extends CustomPainter {
         image.width.toDouble(),
         image.height.toDouble(),
       );
-      final double aspect =
-          image.width / (image.height == 0 ? 1 : image.height);
-      final double targetW = aspect >= 1.0 ? 440.0 : 440.0 * aspect;
-      final double targetH = aspect >= 1.0 ? 440.0 / aspect : 440.0;
+      final Size target = imageTargetSize(image);
       final dst = Rect.fromCenter(
         center: Offset.zero,
-        width: targetW,
-        height: targetH,
+        width: target.width,
+        height: target.height,
       );
       canvas.drawImageRect(
         image,
@@ -237,15 +237,13 @@ class ScenePainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  void _drawSelectionBox(Canvas canvas) {
+  void _drawSelectionBox(Canvas canvas, SceneLayer layer) {
+    // Bingkai mengikuti ukuran konten layer, tipis dan tidak ikut diskalakan.
     final Paint borderPaint = Paint()
-      ..color = colors.accent
+      ..color = colors.accent.withValues(alpha: 0.85)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawRect(
-      Rect.fromCenter(center: Offset.zero, width: 240, height: 240),
-      borderPaint,
-    );
+      ..strokeWidth = 1.5 / layer.transform.scale;
+    canvas.drawRect(layerBounds(layer, images).inflate(4), borderPaint);
   }
 
   @override

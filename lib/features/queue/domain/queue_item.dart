@@ -19,6 +19,7 @@ class QueueItem {
     required this.sourceType,
     this.sourceUrl,
     this.errorMessage,
+    this.thumbnailPath,
   });
 
   final String id;
@@ -29,6 +30,9 @@ class QueueItem {
   final String? sourceUrl;
   final String? errorMessage;
 
+  /// Stiker hasil impor (status selesai) atau file sumber (masih diproses).
+  final String? thumbnailPath;
+
   QueueItem copyWith({QueueStatus? status, int? progress}) => QueueItem(
     id: id,
     title: title,
@@ -37,6 +41,7 @@ class QueueItem {
     sourceType: sourceType,
     sourceUrl: sourceUrl,
     errorMessage: errorMessage,
+    thumbnailPath: thumbnailPath,
   );
 }
 

@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'tray_icon_builder.dart';
+import 'whatsapp_sticker_validator.dart';
+
 class WhatsAppExportResult {
   const WhatsAppExportResult({
     required this.stagingPath,
@@ -13,8 +16,24 @@ class WhatsAppExportResult {
   final String identifier;
 }
 
+/// Kesalahan ekspor dengan pesan yang bisa langsung ditampilkan ke pengguna.
+class WhatsAppExportException implements Exception {
+  const WhatsAppExportException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class WhatsAppStagingExporter {
-  const WhatsAppStagingExporter();
+  const WhatsAppStagingExporter({
+    this.trayIconBuilder = const TrayIconBuilder(),
+  });
+
+  static const String trayFileName = 'tray.png';
+
+  final TrayIconBuilder trayIconBuilder;
 
   Future<WhatsAppExportResult> exportPack({
     required String stagingBaseDir,
@@ -28,64 +47,67 @@ class WhatsAppStagingExporter {
     if (stickerPaths.length < 3 || stickerPaths.length > 30) {
       throw ArgumentError('Stiker harus berjumlah 3 sampai 30 untuk WhatsApp');
     }
+    _validateStickers(stickerPaths);
 
     final packDir = Directory('$stagingBaseDir/$identifier');
-    if (!packDir.existsSync()) {
-      packDir.createSync(recursive: true);
-    }
+    if (packDir.existsSync()) packDir.deleteSync(recursive: true);
+    packDir.createSync(recursive: true);
 
-    // Write tray icon
-    final trayFile = File('${packDir.path}/tray.webp');
-    if (trayIconPath != null && File(trayIconPath).existsSync()) {
-      File(trayIconPath).copySync(trayFile.path);
-    } else {
-      trayFile.writeAsBytesSync(const [
-        82,
-        73,
-        70,
-        70,
-        0,
-        0,
-        0,
-        0,
-        87,
-        69,
-        66,
-        80,
-      ]);
-    }
+    await trayIconBuilder.build(
+      sourcePath: trayIconPath ?? stickerPaths.first,
+      outputPath: '${packDir.path}/$trayFileName',
+    );
+    final entries = _copyStickers(packDir, stickerPaths, emojis);
+    _writeMetadata(packDir, identifier, name, author, entries);
 
-    // Write stickers
-    final stickerEntries = <Map<String, dynamic>>[];
-    for (var i = 0; i < stickerPaths.length; i++) {
-      final fileName = '${(i + 1).toString().padLeft(2, '0')}.webp';
-      final destFile = File('${packDir.path}/$fileName');
-      final srcFile = File(stickerPaths[i]);
-      if (srcFile.existsSync()) {
-        srcFile.copySync(destFile.path);
-      } else {
-        destFile.writeAsBytesSync(const [
-          82,
-          73,
-          70,
-          70,
-          0,
-          0,
-          0,
-          0,
-          87,
-          69,
-          66,
-          80,
-        ]);
+    return WhatsAppExportResult(
+      stagingPath: packDir.path,
+      stickerCount: stickerPaths.length,
+      identifier: identifier,
+    );
+  }
+
+  void _validateStickers(List<String> paths) {
+    for (var i = 0; i < paths.length; i++) {
+      final problem = WhatsAppStickerValidator.checkSticker(paths[i]);
+      if (problem != null) {
+        throw WhatsAppExportException('Stiker ke-${i + 1}: $problem');
       }
-      stickerEntries.add({
-        'image_file': fileName,
-        'emojis': emojis.isNotEmpty ? emojis : ['😀'],
-      });
     }
+  }
 
-    // Write metadata.json
+  List<Map<String, dynamic>> _copyStickers(
+    Directory packDir,
+    List<String> paths,
+    List<String> emojis,
+  ) {
+    return [
+      for (var i = 0; i < paths.length; i++)
+        _copyOne(packDir, paths[i], i, emojis),
+    ];
+  }
+
+  Map<String, dynamic> _copyOne(
+    Directory packDir,
+    String source,
+    int index,
+    List<String> emojis,
+  ) {
+    final fileName = '${(index + 1).toString().padLeft(2, '0')}.webp';
+    File(source).copySync('${packDir.path}/$fileName');
+    return {
+      'image_file': fileName,
+      'emojis': emojis.isNotEmpty ? emojis : ['😀'],
+    };
+  }
+
+  void _writeMetadata(
+    Directory packDir,
+    String identifier,
+    String name,
+    String author,
+    List<Map<String, dynamic>> stickers,
+  ) {
     final meta = {
       'android_play_store_link': '',
       'ios_app_store_link': '',
@@ -97,25 +119,17 @@ class WhatsAppStagingExporter {
         {
           'identifier': identifier,
           'name': name,
-          'publisher': author,
-          'tray_image_file': 'tray.webp',
-          'image_data_version': '1',
+          'publisher': author.trim().isEmpty ? 'Sticker Studio' : author,
+          'tray_image_file': trayFileName,
+          'image_data_version': DateTime.now().millisecondsSinceEpoch.toString(),
           'avoid_cache': false,
           'animated_sticker_pack': false,
-          'stickers': stickerEntries,
+          'stickers': stickers,
         },
       ],
     };
-
-    final metaFile = File('${packDir.path}/metadata.json');
-    metaFile.writeAsStringSync(
+    File('${packDir.path}/metadata.json').writeAsStringSync(
       const JsonEncoder.withIndent('  ').convert(meta),
-    );
-
-    return WhatsAppExportResult(
-      stagingPath: packDir.path,
-      stickerCount: stickerPaths.length,
-      identifier: identifier,
     );
   }
 }

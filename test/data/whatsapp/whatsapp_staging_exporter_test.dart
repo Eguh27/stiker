@@ -2,73 +2,104 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sticker_studio/features/data/whatsapp/tray_icon_builder.dart';
 import 'package:sticker_studio/features/data/whatsapp/whatsapp_staging_exporter.dart';
+
+class _FakeTrayBuilder extends TrayIconBuilder {
+  const _FakeTrayBuilder();
+
+  @override
+  Future<void> build({
+    required String sourcePath,
+    required String outputPath,
+  }) async {
+    File(outputPath).writeAsBytesSync(const [1, 2, 3]);
+  }
+}
+
+/// Header RIFF....WEBP minimal: cukup untuk lolos validasi format.
+List<int> _webpBytes() => [
+  ...'RIFF'.codeUnits,
+  0, 0, 0, 0,
+  ...'WEBP'.codeUnits,
+  0, 0, 0, 0,
+];
 
 void main() {
   late Directory tempDir;
+  const exporter = WhatsAppStagingExporter(trayIconBuilder: _FakeTrayBuilder());
 
-  setUp(() {
-    tempDir = Directory.systemTemp.createTempSync('wa_staging_test_');
-  });
+  List<String> makeStickers(int count) => [
+    for (var i = 0; i < count; i++)
+      (File('${tempDir.path}/src$i.webp')..writeAsBytesSync(_webpBytes())).path,
+  ];
 
-  tearDown(() {
-    if (tempDir.existsSync()) {
-      tempDir.deleteSync(recursive: true);
-    }
-  });
+  setUp(() => tempDir = Directory.systemTemp.createTempSync('wa_staging_'));
+  tearDown(() => tempDir.deleteSync(recursive: true));
 
-  test('WhatsAppStagingExporter menolak kurang dari 3 stiker', () async {
-    const exporter = WhatsAppStagingExporter();
+  test('menolak kurang dari 3 stiker', () {
     expect(
       () => exporter.exportPack(
         stagingBaseDir: tempDir.path,
         identifier: 'pack-1',
         name: 'Pack Test',
         author: 'Author',
-        stickerPaths: ['/tmp/s1.webp', '/tmp/s2.webp'],
+        stickerPaths: makeStickers(2),
       ),
       throwsArgumentError,
     );
   });
 
-  test(
-    'WhatsAppStagingExporter berhasil mengekspor pack 3 stiker & metadata.json',
-    () async {
-      const exporter = WhatsAppStagingExporter();
-      final res = await exporter.exportPack(
+  test('menolak stiker yang filenya tidak ada, bukan membuat file palsu', () {
+    expect(
+      () => exporter.exportPack(
         stagingBaseDir: tempDir.path,
         identifier: 'pack-1',
         name: 'Pack Test',
-        author: 'Author Test',
-        stickerPaths: ['/tmp/s1.webp', '/tmp/s2.webp', '/tmp/s3.webp'],
-        emojis: ['🔥', '👍'],
-      );
+        author: 'Author',
+        stickerPaths: ['/tidak/ada/1.webp', ...makeStickers(2)],
+      ),
+      throwsA(isA<WhatsAppExportException>()),
+    );
+  });
 
-      expect(res.stickerCount, 3);
-      expect(res.identifier, 'pack-1');
+  test('menolak file yang bukan WebP', () {
+    final fake = File('${tempDir.path}/fake.webp')..writeAsStringSync('bukan webp');
+    expect(
+      () => exporter.exportPack(
+        stagingBaseDir: tempDir.path,
+        identifier: 'pack-1',
+        name: 'Pack Test',
+        author: 'Author',
+        stickerPaths: [fake.path, ...makeStickers(2)],
+      ),
+      throwsA(isA<WhatsAppExportException>()),
+    );
+  });
 
-      final dir = Directory(res.stagingPath);
-      expect(dir.existsSync(), isTrue);
+  test('mengekspor 3 stiker, tray.png, dan metadata.json', () async {
+    final res = await exporter.exportPack(
+      stagingBaseDir: tempDir.path,
+      identifier: 'pack-1',
+      name: 'Pack Test',
+      author: 'Author Test',
+      stickerPaths: makeStickers(3),
+      emojis: ['🔥', '👍'],
+    );
 
-      final metaFile = File('${dir.path}/metadata.json');
-      expect(metaFile.existsSync(), isTrue);
-
-      final meta =
-          jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
-      final packs = meta['sticker_packs'] as List<dynamic>;
-      expect(packs.length, 1);
-      expect(packs.first['identifier'], 'pack-1');
-      expect(packs.first['name'], 'Pack Test');
-      expect(packs.first['publisher'], 'Author Test');
-
-      final stickers = packs.first['stickers'] as List<dynamic>;
-      expect(stickers.length, 3);
-      expect(stickers.first['image_file'], '01.webp');
-
-      expect(File('${dir.path}/tray.webp').existsSync(), isTrue);
-      expect(File('${dir.path}/01.webp').existsSync(), isTrue);
-      expect(File('${dir.path}/02.webp').existsSync(), isTrue);
-      expect(File('${dir.path}/03.webp').existsSync(), isTrue);
-    },
-  );
+    expect(res.stickerCount, 3);
+    final dir = Directory(res.stagingPath);
+    final meta =
+        jsonDecode(File('${dir.path}/metadata.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final pack = (meta['sticker_packs'] as List).first as Map<String, dynamic>;
+    expect(pack['identifier'], 'pack-1');
+    expect(pack['publisher'], 'Author Test');
+    expect(pack['tray_image_file'], 'tray.png');
+    expect((pack['stickers'] as List).first['image_file'], '01.webp');
+    expect(File('${dir.path}/tray.png').existsSync(), isTrue);
+    for (final name in ['01', '02', '03']) {
+      expect(File('${dir.path}/$name.webp').existsSync(), isTrue);
+    }
+  });
 }
