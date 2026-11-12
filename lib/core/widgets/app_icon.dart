@@ -29,6 +29,7 @@ enum AppIconName {
   download,
   chevron,
   link,
+  delete,
 }
 
 extension AppIconNameData on AppIconName {
@@ -59,6 +60,7 @@ extension AppIconNameData on AppIconName {
       AppIconName.download => Icons.download_rounded,
       AppIconName.chevron => Icons.chevron_right_rounded,
       AppIconName.link => Icons.link_rounded,
+      AppIconName.delete => Icons.delete_outline_rounded,
     };
   }
 }

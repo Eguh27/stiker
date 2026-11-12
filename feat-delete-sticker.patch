@@ -1,0 +1,712 @@
+diff --git a/lib/core/widgets/app_icon.dart b/lib/core/widgets/app_icon.dart
+index 86165e3..5bc3d25 100644
+--- a/lib/core/widgets/app_icon.dart
++++ b/lib/core/widgets/app_icon.dart
+@@ -29,6 +29,7 @@ enum AppIconName {
+   download,
+   chevron,
+   link,
++  delete,
+ }
+ 
+ extension AppIconNameData on AppIconName {
+@@ -59,6 +60,7 @@ extension AppIconNameData on AppIconName {
+       AppIconName.download => Icons.download_rounded,
+       AppIconName.chevron => Icons.chevron_right_rounded,
+       AppIconName.link => Icons.link_rounded,
++      AppIconName.delete => Icons.delete_outline_rounded,
+     };
+   }
+ }
+diff --git a/lib/features/data/sticker/drift_sticker_repository.dart b/lib/features/data/sticker/drift_sticker_repository.dart
+index 8aa1c75..967169d 100644
+--- a/lib/features/data/sticker/drift_sticker_repository.dart
++++ b/lib/features/data/sticker/drift_sticker_repository.dart
+@@ -4,6 +4,7 @@ import '../app_database.dart' hide Sticker;
+ import '../database/database_enums.dart';
+ import '../../library/domain/sticker.dart';
+ import '../../library/domain/sticker_repository.dart';
++import 'sticker_deleter.dart';
+ import 'sticker_row_mapper.dart';
+ 
+ /// Implementasi SQLite Drift untuk StickerRepository.
+@@ -21,6 +22,10 @@ class DriftStickerRepository implements StickerRepository {
+     return rows.map(stickerFromRow).toList();
+   }
+ 
++  @override
++  Future<int> deleteStickers(Iterable<String> ids) =>
++      StickerDeleter(_database).delete(ids);
++
+   Future<void> addSticker({
+     required String id,
+     required String filePath,
+diff --git a/lib/features/data/sticker/sticker_deleter.dart b/lib/features/data/sticker/sticker_deleter.dart
+new file mode 100644
+index 0000000..55a3a08
+--- /dev/null
++++ b/lib/features/data/sticker/sticker_deleter.dart
+@@ -0,0 +1,119 @@
++import 'dart:io';
++
++import 'package:drift/drift.dart';
++
++import '../app_database.dart';
++
++/// Menghapus stiker secara bersih: relasi pack & project, riwayat antrean,
++/// baris stiker, lalu file di disk. Database dulu (satu transaksi), file
++/// belakangan, supaya kegagalan hapus file tidak meninggalkan baris yatim.
++class StickerDeleter {
++  StickerDeleter(this._database);
++
++  final AppDatabase _database;
++
++  /// Mengembalikan jumlah stiker yang benar-benar terhapus.
++  Future<int> delete(Iterable<String> ids) async {
++    final Set<String> idSet = ids.toSet();
++    if (idSet.isEmpty) return 0;
++
++    final stickers = await (_database.select(
++      _database.stickers,
++    )..where((t) => t.id.isIn(idSet))).get();
++    final queued = await (_database.select(
++      _database.importQueue,
++    )..where((t) => t.id.isIn(idSet))).get();
++
++    await _database.transaction(() async {
++      final Set<String> packIds = await _detachFromPacks(idSet);
++      await (_database.delete(
++        _database.projects,
++      )..where((t) => t.stickerId.isIn(idSet))).go();
++      await (_database.delete(
++        _database.importQueue,
++      )..where((t) => t.id.isIn(idSet))).go();
++      await (_database.delete(
++        _database.stickers,
++      )..where((t) => t.id.isIn(idSet))).go();
++      final Set<String> removedPaths = _paths(stickers);
++      for (final String packId in packIds) {
++        await _refreshPack(packId, removedPaths);
++      }
++    });
++
++    await _deleteFiles([
++      ..._paths(stickers),
++      for (final entry in queued) ?entry.localInputPath,
++    ]);
++    return stickers.length;
++  }
++
++  Set<String> _paths(List<Sticker> stickers) => {
++    for (final s in stickers) ...[s.filePath, s.thumbPath],
++  };
++
++  Future<Set<String>> _detachFromPacks(Set<String> stickerIds) async {
++    final rows = await (_database.select(
++      _database.packStickers,
++    )..where((t) => t.stickerId.isIn(stickerIds))).get();
++    await (_database.delete(
++      _database.packStickers,
++    )..where((t) => t.stickerId.isIn(stickerIds))).go();
++    return {for (final row in rows) row.packId};
++  }
++
++  /// Rapatkan urutan stiker, ganti ikon tray bila menunjuk stiker yang dihapus,
++  /// dan tandai pack perlu disinkronkan ulang ke WhatsApp.
++  Future<void> _refreshPack(String packId, Set<String> removedPaths) async {
++    final remaining =
++        await (_database.select(_database.packStickers)
++              ..where((t) => t.packId.equals(packId))
++              ..orderBy([(t) => OrderingTerm.asc(t.position)]))
++            .get();
++    for (var i = 0; i < remaining.length; i++) {
++      await (_database.update(_database.packStickers)..where(
++            (t) =>
++                t.packId.equals(packId) &
++                t.stickerId.equals(remaining[i].stickerId),
++          ))
++          .write(PackStickersCompanion(position: Value(i)));
++    }
++    final pack = await (_database.select(
++      _database.packs,
++    )..where((t) => t.id.equals(packId))).getSingleOrNull();
++    if (pack == null) return;
++    await (_database.update(
++      _database.packs,
++    )..where((t) => t.id.equals(packId))).write(
++      PacksCompanion(
++        trayIconPath: Value(await _trayFor(pack, remaining, removedPaths)),
++        isSynced: const Value(false),
++        updatedAt: Value(DateTime.now()),
++      ),
++    );
++  }
++
++  Future<String> _trayFor(
++    Pack pack,
++    List<PackSticker> remaining,
++    Set<String> removedPaths,
++  ) async {
++    if (!removedPaths.contains(pack.trayIconPath)) return pack.trayIconPath;
++    if (remaining.isEmpty) return '';
++    final first = await (_database.select(
++      _database.stickers,
++    )..where((t) => t.id.equals(remaining.first.stickerId))).getSingle();
++    return first.thumbPath;
++  }
++
++  Future<void> _deleteFiles(Iterable<String> paths) async {
++    for (final String path in paths.toSet()) {
++      try {
++        final file = File(path);
++        if (await file.exists()) await file.delete();
++      } on FileSystemException {
++        // File sudah hilang/terkunci: baris DB sudah bersih, abaikan.
++      }
++    }
++  }
++}
+diff --git a/lib/features/library/domain/fake_sticker_repository.dart b/lib/features/library/domain/fake_sticker_repository.dart
+index f8c7616..ef45da2 100644
+--- a/lib/features/library/domain/fake_sticker_repository.dart
++++ b/lib/features/library/domain/fake_sticker_repository.dart
+@@ -10,7 +10,7 @@ class FakeStickerRepository implements StickerRepository {
+ 
+   FakeStickerRepository.failing() : this(errorToThrow: StateError('offline'));
+ 
+-  final List<Sticker> stickers;
++  List<Sticker> stickers;
+   final Object? errorToThrow;
+ 
+   static const List<Sticker> localStickers = [
+@@ -79,4 +79,15 @@ class FakeStickerRepository implements StickerRepository {
+     if (error != null) throw error;
+     return stickers;
+   }
++
++  @override
++  Future<int> deleteStickers(Iterable<String> ids) async {
++    final Set<String> idSet = ids.toSet();
++    final int before = stickers.length;
++    stickers = [
++      for (final Sticker s in stickers)
++        if (!idSet.contains(s.id)) s,
++    ];
++    return before - stickers.length;
++  }
+ }
+diff --git a/lib/features/library/domain/sticker_repository.dart b/lib/features/library/domain/sticker_repository.dart
+index b62d8c1..6b9fa62 100644
+--- a/lib/features/library/domain/sticker_repository.dart
++++ b/lib/features/library/domain/sticker_repository.dart
+@@ -4,4 +4,7 @@ import 'sticker.dart';
+ /// ini; presentation hanya bergantung pada interface, bukan ke `data/`.
+ abstract class StickerRepository {
+   Future<List<Sticker>> fetchStickers();
++
++  /// Hapus stiker beserta relasi pack, project, antrean, dan filenya.
++  Future<int> deleteStickers(Iterable<String> ids);
+ }
+diff --git a/lib/features/library/presentation/delete_stickers_action.dart b/lib/features/library/presentation/delete_stickers_action.dart
+new file mode 100644
+index 0000000..8db75eb
+--- /dev/null
++++ b/lib/features/library/presentation/delete_stickers_action.dart
+@@ -0,0 +1,64 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++
++import '../../../core/theme/app_colors.dart';
++import '../../packs/presentation/pack_providers.dart';
++import 'sticker_providers.dart';
++import 'sticker_selection_provider.dart';
++
++/// Konfirmasi lalu hapus semua stiker terpilih, dan segarkan daftar terkait.
++Future<void> deleteSelectedStickers(BuildContext context, WidgetRef ref) async {
++  final Set<String> ids = ref.read(stickerSelectionProvider);
++  if (ids.isEmpty) return;
++  final bool confirmed =
++      await showDialog<bool>(
++        context: context,
++        builder: (_) => _ConfirmDeleteDialog(count: ids.length),
++      ) ??
++      false;
++  if (!confirmed || !context.mounted) return;
++
++  final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
++  try {
++    final int removed = await ref
++        .read(stickerRepositoryProvider)
++        .deleteStickers(ids);
++    ref.read(stickerSelectionProvider.notifier).clear();
++    ref.invalidate(stickerListProvider);
++    ref.invalidate(packListProvider);
++    messenger.showSnackBar(SnackBar(content: Text('$removed stiker dihapus')));
++  } catch (error) {
++    messenger.showSnackBar(
++      SnackBar(content: Text('Gagal menghapus stiker: $error')),
++    );
++  }
++}
++
++class _ConfirmDeleteDialog extends StatelessWidget {
++  const _ConfirmDeleteDialog({required this.count});
++
++  final int count;
++
++  @override
++  Widget build(BuildContext context) {
++    final AppColors colors = context.colors;
++    return AlertDialog(
++      title: Text('Hapus $count stiker?'),
++      content: const Text(
++        'Stiker juga dihapus dari pack yang memakainya. '
++        'Tindakan ini tidak bisa dibatalkan.',
++      ),
++      actions: [
++        TextButton(
++          onPressed: () => Navigator.of(context).pop(false),
++          child: const Text('Batal'),
++        ),
++        FilledButton(
++          style: FilledButton.styleFrom(backgroundColor: colors.danger),
++          onPressed: () => Navigator.of(context).pop(true),
++          child: const Text('Hapus'),
++        ),
++      ],
++    );
++  }
++}
+diff --git a/lib/features/library/presentation/library_page.dart b/lib/features/library/presentation/library_page.dart
+index ad2d2f1..b9291e8 100644
+--- a/lib/features/library/presentation/library_page.dart
++++ b/lib/features/library/presentation/library_page.dart
+@@ -12,11 +12,14 @@ import '../../packs/presentation/pack_card.dart';
+ import '../../packs/presentation/pack_editor_page.dart';
+ import '../../packs/presentation/pack_providers.dart';
+ import '../domain/sticker.dart';
++import 'delete_stickers_action.dart';
+ import 'import_sheet.dart';
+ import 'library_hero.dart';
+ import 'library_segmented.dart';
+ import 'sticker_grid.dart';
++import 'selection_bar.dart';
+ import 'sticker_providers.dart';
++import 'sticker_selection_provider.dart';
+ 
+ /// Library: hero + paket stiker + segmented stiker + FAB.
+ class LibraryPage extends ConsumerStatefulWidget {
+@@ -46,6 +49,22 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
+     });
+   }
+ 
++  void _onStickerTap(Sticker sticker) {
++    final selection = ref.read(stickerSelectionProvider.notifier);
++    if (ref.read(stickerSelectionProvider).isNotEmpty) {
++      selection.toggle(sticker.id);
++      return;
++    }
++    Navigator.of(context).push(
++      MaterialPageRoute<void>(
++        builder: (_) => ImageEditorPage(
++          stickerId: sticker.id,
++          initialImagePath: sticker.filePath,
++        ),
++      ),
++    );
++  }
++
+   void _openPackEditor({String? packId}) {
+     Navigator.of(context).push(
+       MaterialPageRoute<void>(builder: (_) => PackEditorPage(packId: packId)),
+@@ -64,8 +83,15 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
+         : 0;
+ 
+     final packsList = packs.value ?? const <StickerPack>[];
++    final Set<String> selected = ref.watch(stickerSelectionProvider);
++    final bool selecting = selected.isNotEmpty;
+ 
+-    return Scaffold(
++    return PopScope(
++      canPop: !selecting,
++      onPopInvokedWithResult: (didPop, _) {
++        if (!didPop) ref.read(stickerSelectionProvider.notifier).clear();
++      },
++      child: Scaffold(
+       appBar: const TopBar(title: 'Sticker Library', showThemeToggle: true),
+       body: RefreshIndicator(
+         onRefresh: () async {
+@@ -78,7 +104,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
+             AppSpacing.s5,
+             AppSpacing.s2,
+             AppSpacing.s5,
+-            AppSpacing.s5,
++            88,
+           ),
+           children: [
+             LibraryHero(stickerCount: stickerCount, packCount: packCount),
+@@ -117,12 +143,22 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
+           ],
+         ),
+       ),
+-      floatingActionButton: FloatingActionButton(
+-        backgroundColor: Theme.of(context).colorScheme.primary,
+-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+-        onPressed: () => ImportSheet.show(context, ref),
+-        tooltip: 'Tambah stiker',
+-        child: const AppIcon(AppIconName.plus),
++      floatingActionButtonLocation: selecting
++          ? FloatingActionButtonLocation.centerFloat
++          : FloatingActionButtonLocation.endFloat,
++      floatingActionButton: selecting
++          ? SelectionBar(
++              count: selected.length,
++              onCancel: ref.read(stickerSelectionProvider.notifier).clear,
++              onDelete: () => deleteSelectedStickers(context, ref),
++            )
++          : FloatingActionButton(
++              backgroundColor: Theme.of(context).colorScheme.primary,
++              foregroundColor: Theme.of(context).colorScheme.onPrimary,
++              onPressed: () => ImportSheet.show(context, ref),
++              tooltip: 'Tambah stiker',
++              child: const AppIcon(AppIconName.plus),
++            ),
+       ),
+     );
+   }
+@@ -147,14 +183,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
+         return [
+           StickerGrid(
+             stickers: visible,
+-            onTap: (s) => Navigator.of(context).push(
+-              MaterialPageRoute<void>(
+-                builder: (_) => ImageEditorPage(
+-                  stickerId: s.id,
+-                  initialImagePath: s.filePath,
+-                ),
+-              ),
+-            ),
++            selectedIds: ref.watch(stickerSelectionProvider),
++            onLongPress: (s) =>
++                ref.read(stickerSelectionProvider.notifier).select(s.id),
++            onTap: (s) => _onStickerTap(s),
+           ),
+         ];
+       },
+diff --git a/lib/features/library/presentation/selection_bar.dart b/lib/features/library/presentation/selection_bar.dart
+new file mode 100644
+index 0000000..94cc6db
+--- /dev/null
++++ b/lib/features/library/presentation/selection_bar.dart
+@@ -0,0 +1,49 @@
++import 'package:flutter/material.dart';
++
++import '../../../core/theme/app_spacing.dart';
++import '../../../core/widgets/app_icon.dart';
++import '../../../core/widgets/glass/glass_card.dart';
++import '../../../core/widgets/glass/glass_pill_button.dart';
++
++/// Bilah aksi mode seleksi: jumlah terpilih, Batal, dan Hapus.
++class SelectionBar extends StatelessWidget {
++  const SelectionBar({
++    super.key,
++    required this.count,
++    required this.onCancel,
++    required this.onDelete,
++  });
++
++  final int count;
++  final VoidCallback onCancel;
++  final VoidCallback onDelete;
++
++  @override
++  Widget build(BuildContext context) {
++    return GlassCard(
++      radius: AppRadius.pill,
++      padding: const EdgeInsets.symmetric(
++        horizontal: AppSpacing.s4,
++        vertical: AppSpacing.s2,
++      ),
++      child: Row(
++        mainAxisSize: MainAxisSize.min,
++        children: [
++          Text(
++            '$count dipilih',
++            style: Theme.of(context).textTheme.titleMedium,
++          ),
++          const SizedBox(width: AppSpacing.s4),
++          GlassPillButton(label: 'Batal', onPressed: onCancel),
++          const SizedBox(width: AppSpacing.s2),
++          GlassPillButton(
++            label: 'Hapus',
++            style: GlassPillStyle.accent,
++            icon: const AppIcon(AppIconName.delete, size: 18, color: Colors.white),
++            onPressed: count == 0 ? null : onDelete,
++          ),
++        ],
++      ),
++    );
++  }
++}
+diff --git a/lib/features/library/presentation/sticker_card.dart b/lib/features/library/presentation/sticker_card.dart
+index e01fe54..3dc78e3 100644
+--- a/lib/features/library/presentation/sticker_card.dart
++++ b/lib/features/library/presentation/sticker_card.dart
+@@ -9,10 +9,18 @@ import '../domain/sticker.dart';
+ import 'sticker_visuals.dart';
+ 
+ class StickerCard extends StatelessWidget {
+-  const StickerCard({super.key, required this.sticker, this.onTap});
++  const StickerCard({
++    super.key,
++    required this.sticker,
++    this.onTap,
++    this.onLongPress,
++    this.selected = false,
++  });
+ 
+   final Sticker sticker;
+   final ValueChanged<Sticker>? onTap;
++  final ValueChanged<Sticker>? onLongPress;
++  final bool selected;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -23,10 +31,14 @@ class StickerCard extends StatelessWidget {
+       child: InkWell(
+         borderRadius: AppRadius.card,
+         onTap: onTap == null ? null : () => onTap!(sticker),
++        onLongPress: onLongPress == null ? null : () => onLongPress!(sticker),
+         child: Container(
+           decoration: BoxDecoration(
+             borderRadius: AppRadius.card,
+-            border: Border.all(color: colors.glassBorder),
++            border: Border.all(
++              color: selected ? colors.accent : colors.glassBorder,
++              width: selected ? 2.5 : 1,
++            ),
+             boxShadow: AppShadows.glass,
+           ),
+           child: Stack(
+@@ -52,6 +64,16 @@ class StickerCard extends StatelessWidget {
+                   label: sticker.label,
+                   shape: shapeFor(sticker.shape),
+                 ),
++              if (selected)
++                Positioned(
++                  top: AppSpacing.s2,
++                  right: AppSpacing.s2,
++                  child: CircleAvatar(
++                    radius: 12,
++                    backgroundColor: colors.accent,
++                    child: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
++                  ),
++                ),
+               Positioned(
+                 left: AppSpacing.s2,
+                 bottom: AppSpacing.s2,
+diff --git a/lib/features/library/presentation/sticker_grid.dart b/lib/features/library/presentation/sticker_grid.dart
+index 2f0b4e4..4cfee4e 100644
+--- a/lib/features/library/presentation/sticker_grid.dart
++++ b/lib/features/library/presentation/sticker_grid.dart
+@@ -15,10 +15,18 @@ int stickerColumnsFor(double width) {
+ }
+ 
+ class StickerGrid extends StatelessWidget {
+-  const StickerGrid({super.key, required this.stickers, this.onTap});
++  const StickerGrid({
++    super.key,
++    required this.stickers,
++    this.onTap,
++    this.onLongPress,
++    this.selectedIds = const {},
++  });
+ 
+   final List<Sticker> stickers;
+   final ValueChanged<Sticker>? onTap;
++  final ValueChanged<Sticker>? onLongPress;
++  final Set<String> selectedIds;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -36,7 +44,12 @@ class StickerGrid extends StatelessWidget {
+           itemCount: stickers.length,
+           itemBuilder: (BuildContext context, int index) {
+             final Sticker sticker = stickers[index];
+-            return StickerCard(sticker: sticker, onTap: onTap);
++            return StickerCard(
++              sticker: sticker,
++              onTap: onTap,
++              onLongPress: onLongPress,
++              selected: selectedIds.contains(sticker.id),
++            );
+           },
+         );
+       },
+diff --git a/lib/features/library/presentation/sticker_selection_provider.dart b/lib/features/library/presentation/sticker_selection_provider.dart
+new file mode 100644
+index 0000000..ad63248
+--- /dev/null
++++ b/lib/features/library/presentation/sticker_selection_provider.dart
+@@ -0,0 +1,24 @@
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++
++/// Id stiker yang sedang dipilih di Library. Tidak kosong = mode seleksi.
++class StickerSelectionNotifier extends Notifier<Set<String>> {
++  @override
++  Set<String> build() => const {};
++
++  void toggle(String id) {
++    final Set<String> next = {...state};
++    if (!next.remove(id)) next.add(id);
++    state = next;
++  }
++
++  void select(String id) => state = {...state, id};
++
++  void selectAll(Iterable<String> ids) => state = ids.toSet();
++
++  void clear() => state = const {};
++}
++
++final stickerSelectionProvider =
++    NotifierProvider<StickerSelectionNotifier, Set<String>>(
++      StickerSelectionNotifier.new,
++    );
+diff --git a/lib/main.dart b/lib/main.dart
+index 74805eb..4627a1e 100644
+--- a/lib/main.dart
++++ b/lib/main.dart
+@@ -125,7 +125,6 @@ class _AppShellState extends ConsumerState<AppShell>
+   @override
+   Widget build(BuildContext context) {
+     return Scaffold(
+-      extendBody: true,
+       body: IndexedStack(index: _currentIndex, children: _pages),
+       bottomNavigationBar: BottomNav(
+         currentIndex: _currentIndex,
+diff --git a/test/data/sticker/sticker_deleter_test.dart b/test/data/sticker/sticker_deleter_test.dart
+new file mode 100644
+index 0000000..d290839
+--- /dev/null
++++ b/test/data/sticker/sticker_deleter_test.dart
+@@ -0,0 +1,119 @@
++import 'dart:io';
++
++import 'package:drift/drift.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:sticker_studio/features/data/app_database.dart';
++import 'package:sticker_studio/features/data/database/database_enums.dart';
++import 'package:sticker_studio/features/data/sticker/sticker_deleter.dart';
++
++import '../support/test_database.dart';
++
++void main() {
++  late AppDatabase database;
++  late Directory tempDir;
++  late StickerDeleter deleter;
++
++  setUp(() {
++    database = createTestDatabase();
++    tempDir = Directory.systemTemp.createTempSync('sticker_deleter_');
++    deleter = StickerDeleter(database);
++  });
++
++  tearDown(() async {
++    await database.close();
++    tempDir.deleteSync(recursive: true);
++  });
++
++  String makeFile(String name) =>
++      (File('${tempDir.path}/$name')..writeAsStringSync('x')).path;
++
++  Future<void> addSticker(String id) {
++    final path = makeFile('$id.webp');
++    return database
++        .into(database.stickers)
++        .insert(
++          StickersCompanion.insert(
++            id: id,
++            filePath: path,
++            thumbPath: path,
++            width: 512,
++            height: 512,
++            sizeKb: 10,
++            sha256: id,
++            sourceType: SourceType.manualFile,
++            createdAt: DateTime(2026, 11, 11),
++          ),
++        );
++  }
++
++  Future<void> addPack(String id, List<String> stickerIds, String tray) async {
++    final now = DateTime(2026, 11, 11);
++    await database
++        .into(database.packs)
++        .insert(
++          PacksCompanion.insert(
++            id: id,
++            name: id,
++            author: 'Tester',
++            trayIconPath: tray,
++            version: '1',
++            isSynced: true,
++            createdAt: now,
++            updatedAt: now,
++          ),
++        );
++    for (var i = 0; i < stickerIds.length; i++) {
++      await database
++          .into(database.packStickers)
++          .insert(
++            PackStickersCompanion.insert(
++              packId: id,
++              stickerId: stickerIds[i],
++              position: i,
++            ),
++          );
++    }
++  }
++
++  test('menghapus baris, relasi pack, project, antrean, dan file', () async {
++    await addSticker('a');
++    await addSticker('b');
++    await addSticker('c');
++    final trayOfA = (await (database.select(database.stickers)
++          ..where((t) => t.id.equals('a'))).getSingle()).filePath;
++    await addPack('pack1', ['a', 'b', 'c'], trayOfA);
++    await database
++        .into(database.projects)
++        .insert(
++          ProjectsCompanion.insert(
++            id: 'p-a',
++            stickerId: 'a',
++            projectJson: '{}',
++            updatedAt: DateTime(2026, 11, 11),
++          ),
++        );
++    final fileOfA = File(trayOfA);
++
++    final removed = await deleter.delete(['a']);
++
++    expect(removed, 1);
++    expect(fileOfA.existsSync(), isFalse);
++    expect(await database.select(database.stickers).get(), hasLength(2));
++    expect(await database.select(database.projects).get(), isEmpty);
++
++    final rows = await (database.select(database.packStickers)
++          ..orderBy([(t) => OrderingTerm.asc(t.position)])).get();
++    expect([for (final r in rows) r.stickerId], ['b', 'c']);
++    expect([for (final r in rows) r.position], [0, 1]);
++
++    final pack = await database.select(database.packs).getSingle();
++    expect(pack.isSynced, isFalse);
++    expect(pack.trayIconPath, isNot(trayOfA));
++    expect(pack.trayIconPath, isNotEmpty);
++  });
++
++  test('id yang tidak ada diabaikan dan mengembalikan 0', () async {
++    expect(await deleter.delete(['tidak-ada']), 0);
++    expect(await deleter.delete(const []), 0);
++  });
++}

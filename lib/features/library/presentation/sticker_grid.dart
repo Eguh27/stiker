@@ -15,10 +15,18 @@ int stickerColumnsFor(double width) {
 }
 
 class StickerGrid extends StatelessWidget {
-  const StickerGrid({super.key, required this.stickers, this.onTap});
+  const StickerGrid({
+    super.key,
+    required this.stickers,
+    this.onTap,
+    this.onLongPress,
+    this.selectedIds = const {},
+  });
 
   final List<Sticker> stickers;
   final ValueChanged<Sticker>? onTap;
+  final ValueChanged<Sticker>? onLongPress;
+  final Set<String> selectedIds;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +44,12 @@ class StickerGrid extends StatelessWidget {
           itemCount: stickers.length,
           itemBuilder: (BuildContext context, int index) {
             final Sticker sticker = stickers[index];
-            return StickerCard(sticker: sticker, onTap: onTap);
+            return StickerCard(
+              sticker: sticker,
+              onTap: onTap,
+              onLongPress: onLongPress,
+              selected: selectedIds.contains(sticker.id),
+            );
           },
         );
       },

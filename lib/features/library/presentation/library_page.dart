@@ -12,11 +12,14 @@ import '../../packs/presentation/pack_card.dart';
 import '../../packs/presentation/pack_editor_page.dart';
 import '../../packs/presentation/pack_providers.dart';
 import '../domain/sticker.dart';
+import 'delete_stickers_action.dart';
 import 'import_sheet.dart';
 import 'library_hero.dart';
 import 'library_segmented.dart';
 import 'sticker_grid.dart';
+import 'selection_bar.dart';
 import 'sticker_providers.dart';
+import 'sticker_selection_provider.dart';
 
 /// Library: hero + paket stiker + segmented stiker + FAB.
 class LibraryPage extends ConsumerStatefulWidget {
@@ -46,6 +49,22 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     });
   }
 
+  void _onStickerTap(Sticker sticker) {
+    final selection = ref.read(stickerSelectionProvider.notifier);
+    if (ref.read(stickerSelectionProvider).isNotEmpty) {
+      selection.toggle(sticker.id);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ImageEditorPage(
+          stickerId: sticker.id,
+          initialImagePath: sticker.filePath,
+        ),
+      ),
+    );
+  }
+
   void _openPackEditor({String? packId}) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => PackEditorPage(packId: packId)),
@@ -64,8 +83,15 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         : 0;
 
     final packsList = packs.value ?? const <StickerPack>[];
+    final Set<String> selected = ref.watch(stickerSelectionProvider);
+    final bool selecting = selected.isNotEmpty;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) ref.read(stickerSelectionProvider.notifier).clear();
+      },
+      child: Scaffold(
       appBar: const TopBar(title: 'Sticker Library', showThemeToggle: true),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -78,7 +104,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             AppSpacing.s5,
             AppSpacing.s2,
             AppSpacing.s5,
-            AppSpacing.s5,
+            88,
           ),
           children: [
             LibraryHero(stickerCount: stickerCount, packCount: packCount),
@@ -117,12 +143,22 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        onPressed: () => ImportSheet.show(context, ref),
-        tooltip: 'Tambah stiker',
-        child: const AppIcon(AppIconName.plus),
+      floatingActionButtonLocation: selecting
+          ? FloatingActionButtonLocation.centerFloat
+          : FloatingActionButtonLocation.endFloat,
+      floatingActionButton: selecting
+          ? SelectionBar(
+              count: selected.length,
+              onCancel: ref.read(stickerSelectionProvider.notifier).clear,
+              onDelete: () => deleteSelectedStickers(context, ref),
+            )
+          : FloatingActionButton(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              onPressed: () => ImportSheet.show(context, ref),
+              tooltip: 'Tambah stiker',
+              child: const AppIcon(AppIconName.plus),
+            ),
       ),
     );
   }
@@ -147,14 +183,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         return [
           StickerGrid(
             stickers: visible,
-            onTap: (s) => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => ImageEditorPage(
-                  stickerId: s.id,
-                  initialImagePath: s.filePath,
-                ),
-              ),
-            ),
+            selectedIds: ref.watch(stickerSelectionProvider),
+            onLongPress: (s) =>
+                ref.read(stickerSelectionProvider.notifier).select(s.id),
+            onTap: (s) => _onStickerTap(s),
           ),
         ];
       },

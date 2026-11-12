@@ -10,7 +10,7 @@ class FakeStickerRepository implements StickerRepository {
 
   FakeStickerRepository.failing() : this(errorToThrow: StateError('offline'));
 
-  final List<Sticker> stickers;
+  List<Sticker> stickers;
   final Object? errorToThrow;
 
   static const List<Sticker> localStickers = [
@@ -78,5 +78,16 @@ class FakeStickerRepository implements StickerRepository {
     final Object? error = errorToThrow;
     if (error != null) throw error;
     return stickers;
+  }
+
+  @override
+  Future<int> deleteStickers(Iterable<String> ids) async {
+    final Set<String> idSet = ids.toSet();
+    final int before = stickers.length;
+    stickers = [
+      for (final Sticker s in stickers)
+        if (!idSet.contains(s.id)) s,
+    ];
+    return before - stickers.length;
   }
 }

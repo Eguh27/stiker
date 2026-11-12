@@ -4,6 +4,7 @@ import '../app_database.dart' hide Sticker;
 import '../database/database_enums.dart';
 import '../../library/domain/sticker.dart';
 import '../../library/domain/sticker_repository.dart';
+import 'sticker_deleter.dart';
 import 'sticker_row_mapper.dart';
 
 /// Implementasi SQLite Drift untuk StickerRepository.
@@ -20,6 +21,10 @@ class DriftStickerRepository implements StickerRepository {
 
     return rows.map(stickerFromRow).toList();
   }
+
+  @override
+  Future<int> deleteStickers(Iterable<String> ids) =>
+      StickerDeleter(_database).delete(ids);
 
   Future<void> addSticker({
     required String id,

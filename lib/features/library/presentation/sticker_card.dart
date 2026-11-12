@@ -9,10 +9,18 @@ import '../domain/sticker.dart';
 import 'sticker_visuals.dart';
 
 class StickerCard extends StatelessWidget {
-  const StickerCard({super.key, required this.sticker, this.onTap});
+  const StickerCard({
+    super.key,
+    required this.sticker,
+    this.onTap,
+    this.onLongPress,
+    this.selected = false,
+  });
 
   final Sticker sticker;
   final ValueChanged<Sticker>? onTap;
+  final ValueChanged<Sticker>? onLongPress;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -23,10 +31,14 @@ class StickerCard extends StatelessWidget {
       child: InkWell(
         borderRadius: AppRadius.card,
         onTap: onTap == null ? null : () => onTap!(sticker),
+        onLongPress: onLongPress == null ? null : () => onLongPress!(sticker),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: AppRadius.card,
-            border: Border.all(color: colors.glassBorder),
+            border: Border.all(
+              color: selected ? colors.accent : colors.glassBorder,
+              width: selected ? 2.5 : 1,
+            ),
             boxShadow: AppShadows.glass,
           ),
           child: Stack(
@@ -51,6 +63,16 @@ class StickerCard extends StatelessWidget {
                   color: stickerColorFor(colors, sticker.colorKind),
                   label: sticker.label,
                   shape: shapeFor(sticker.shape),
+                ),
+              if (selected)
+                Positioned(
+                  top: AppSpacing.s2,
+                  right: AppSpacing.s2,
+                  child: CircleAvatar(
+                    radius: 12,
+                    backgroundColor: colors.accent,
+                    child: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
+                  ),
                 ),
               Positioned(
                 left: AppSpacing.s2,

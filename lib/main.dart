@@ -125,7 +125,6 @@ class _AppShellState extends ConsumerState<AppShell>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true,
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: BottomNav(
         currentIndex: _currentIndex,
