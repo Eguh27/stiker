@@ -38,39 +38,61 @@ void main() {
 
     tearDown(() => database.close());
 
-    test('fetchPackDetail mengembalikan filePath stiker asli (bukan placeholder)', () async {
-      await database
-          .into(database.stickers)
-          .insert(
-            StickersCompanion.insert(
+    test(
+      'fetchPackDetail mengembalikan filePath stiker asli (bukan placeholder)',
+      () async {
+        for (final String id in ['stk-real', 'stk-real-2', 'stk-real-3']) {
+          await database
+              .into(database.stickers)
+              .insert(
+                StickersCompanion.insert(
+                  id: id,
+                  filePath: '/data/stickers/$id.webp',
+                  thumbPath: '/data/stickers/$id.webp',
+                  width: 512,
+                  height: 512,
+                  sizeKb: 40,
+                  sha256: id,
+                  sourceType: SourceType.manualFile,
+                  createdAt: DateTime(2026, 11, 11),
+                ),
+              );
+        }
+        final created = await adapter.createPack(
+          name: 'Real Pack',
+          author: 'Budi',
+          stickers: const [
+            Sticker(
               id: 'stk-real',
-              filePath: '/data/stickers/stk-real.webp',
-              thumbPath: '/data/stickers/stk-real.webp',
-              width: 512,
-              height: 512,
-              sizeKb: 40,
-              sha256: 'abc',
-              sourceType: SourceType.manualFile,
-              createdAt: DateTime(2026, 11, 11),
+              label: 'x',
+              colorKind: StickerColorKind.mint,
+              shape: StickerShape.blob,
             ),
-          );
-      final created = await adapter.createPack(
-        name: 'Real Pack',
-        author: 'Budi',
-        stickers: const [
-          Sticker(
-            id: 'stk-real',
-            label: 'x',
-            colorKind: StickerColorKind.mint,
-            shape: StickerShape.blob,
-          ),
-        ],
-      );
+            Sticker(
+              id: 'stk-real-2',
+              label: 'y',
+              colorKind: StickerColorKind.mint,
+              shape: StickerShape.blob,
+            ),
+            Sticker(
+              id: 'stk-real-3',
+              label: 'z',
+              colorKind: StickerColorKind.mint,
+              shape: StickerShape.blob,
+            ),
+          ],
+        );
 
-      final loaded = await adapter.fetchPackDetail(created.pack.id);
+        final loaded = await adapter.fetchPackDetail(created.pack.id);
 
-      expect(loaded.stickers.single.filePath, '/data/stickers/stk-real.webp');
-    });
+        expect(
+          loaded.stickers
+              .firstWhere((Sticker sticker) => sticker.id == 'stk-real')
+              .filePath,
+          '/data/stickers/stk-real.webp',
+        );
+      },
+    );
 
     test('createPack menyimpan pack, stiker, dan emoji tags ke DB', () async {
       final stickers = _dummyStickers(3);

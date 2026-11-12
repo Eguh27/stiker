@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'tray_icon_builder.dart';
 import 'whatsapp_sticker_validator.dart';
 
@@ -33,6 +35,10 @@ class WhatsAppStagingExporter {
 
   static const String trayFileName = 'tray.png';
 
+  /// Identifier harus aman dipakai sebagai satu segmen folder. Menolak id
+  /// kosong, pemisah path, dan `..` agar staging tidak pernah menjadi root.
+  static final RegExp _identifierPattern = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
+
   final TrayIconBuilder trayIconBuilder;
 
   Future<WhatsAppExportResult> exportPack({
@@ -44,12 +50,13 @@ class WhatsAppStagingExporter {
     List<String> emojis = const [],
     String? trayIconPath,
   }) async {
+    final Directory packDir = _resolvePackDir(stagingBaseDir, identifier);
+
     if (stickerPaths.length < 3 || stickerPaths.length > 30) {
       throw ArgumentError('Stiker harus berjumlah 3 sampai 30 untuk WhatsApp');
     }
     _validateStickers(stickerPaths);
 
-    final packDir = Directory('$stagingBaseDir/$identifier');
     if (packDir.existsSync()) packDir.deleteSync(recursive: true);
     packDir.createSync(recursive: true);
 
@@ -65,6 +72,24 @@ class WhatsAppStagingExporter {
       stickerCount: stickerPaths.length,
       identifier: identifier,
     );
+  }
+
+  /// Folder satu pack di dalam staging. Menolak identifier tidak valid dan
+  /// memastikan hasil normalisasi tetap berada di bawah folder staging.
+  Directory _resolvePackDir(String stagingBaseDir, String identifier) {
+    if (!_identifierPattern.hasMatch(identifier)) {
+      throw const WhatsAppExportException(
+        'Identifier pack tidak valid. Simpan pack sebelum mengirim ke WhatsApp.',
+      );
+    }
+    final String basePath = p.normalize(
+      Directory(stagingBaseDir).absolute.path,
+    );
+    final String packPath = p.normalize(p.join(basePath, identifier));
+    if (p.equals(packPath, basePath) || !p.isWithin(basePath, packPath)) {
+      throw const WhatsAppExportException('Lokasi staging pack tidak valid.');
+    }
+    return Directory(packPath);
   }
 
   void _validateStickers(List<String> paths) {
@@ -121,15 +146,15 @@ class WhatsAppStagingExporter {
           'name': name,
           'publisher': author.trim().isEmpty ? 'Sticker Studio' : author,
           'tray_image_file': trayFileName,
-          'image_data_version': DateTime.now().millisecondsSinceEpoch.toString(),
+          'image_data_version': DateTime.now().millisecondsSinceEpoch
+              .toString(),
           'avoid_cache': false,
           'animated_sticker_pack': false,
           'stickers': stickers,
         },
       ],
     };
-    File('${packDir.path}/metadata.json').writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert(meta),
-    );
+    File('${packDir.path}/metadata.json')
+        .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(meta));
   }
 }

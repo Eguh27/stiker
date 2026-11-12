@@ -8,10 +8,16 @@ import '../domain/sticker_pack.dart';
 
 /// Kartu pack list (App.tsx `pack-card`), membuka editor saat ditekan.
 class PackCard extends StatelessWidget {
-  const PackCard({super.key, required this.pack, this.onTap});
+  const PackCard({
+    super.key,
+    required this.pack,
+    this.onTap,
+    this.onDelete,
+  });
 
   final StickerPack pack;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +44,17 @@ class PackCard extends StatelessWidget {
               ),
             ),
             AppIcon(AppIconName.chevron, color: colors.text3),
+            if (onDelete != null)
+              IconButton(
+                key: ValueKey<String>('pack-delete-${pack.id}'),
+                onPressed: onDelete,
+                tooltip: 'Hapus pack',
+                icon: AppIcon(
+                  AppIconName.delete,
+                  size: 20,
+                  color: colors.danger,
+                ),
+              ),
           ],
         ),
       ),

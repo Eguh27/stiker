@@ -84,7 +84,9 @@ class DriftPackEditorAdapter implements PackEditorRepository {
         ? [for (final s in stickers) s.id]
         : existing.stickerIds;
     await _ensureStickersExist(stickerIds);
-    final String trayPath = await _resolveTray(stickerIds);
+    final String trayPath = stickerIds.isEmpty
+        ? existing.trayIconPath
+        : await _resolveTray(stickerIds);
     await _repository.updatePack(
       id: packId,
       name: name,
@@ -103,6 +105,9 @@ class DriftPackEditorAdapter implements PackEditorRepository {
   }) {
     return _repository.reorderStickers(packId: packId, stickerIds: stickerIds);
   }
+
+  @override
+  Future<void> deletePack(String packId) => _repository.deletePack(packId);
 
   Future<List<domain.Sticker>> _fetchDomainStickers(List<String> ids) async {
     if (ids.isEmpty) return const [];

@@ -20,9 +20,15 @@ class _FakeTrayBuilder extends TrayIconBuilder {
 /// Header RIFF....WEBP minimal: cukup untuk lolos validasi format.
 List<int> _webpBytes() => [
   ...'RIFF'.codeUnits,
-  0, 0, 0, 0,
+  0,
+  0,
+  0,
+  0,
   ...'WEBP'.codeUnits,
-  0, 0, 0, 0,
+  0,
+  0,
+  0,
+  0,
 ];
 
 void main() {
@@ -64,7 +70,8 @@ void main() {
   });
 
   test('menolak file yang bukan WebP', () {
-    final fake = File('${tempDir.path}/fake.webp')..writeAsStringSync('bukan webp');
+    final fake = File('${tempDir.path}/fake.webp')
+      ..writeAsStringSync('bukan webp');
     expect(
       () => exporter.exportPack(
         stagingBaseDir: tempDir.path,
@@ -75,6 +82,37 @@ void main() {
       ),
       throwsA(isA<WhatsAppExportException>()),
     );
+  });
+
+  test('menolak identifier tidak aman tanpa menghapus staging', () async {
+    final keepDir = Directory('${tempDir.path}/pack-1')..createSync();
+    final sentinel = File('${keepDir.path}/keep.txt')
+      ..writeAsStringSync('aman');
+    final stickers = makeStickers(3);
+
+    for (final String identifier in [
+      '',
+      '..',
+      '../keluar',
+      'pack/sub',
+      'pack name',
+      'a' * 65,
+    ]) {
+      await expectLater(
+        exporter.exportPack(
+          stagingBaseDir: tempDir.path,
+          identifier: identifier,
+          name: 'Pack Test',
+          author: 'Author',
+          stickerPaths: stickers,
+        ),
+        throwsA(isA<WhatsAppExportException>()),
+        reason: 'identifier "$identifier" harus ditolak',
+      );
+    }
+
+    expect(sentinel.existsSync(), isTrue);
+    expect(File('${keepDir.path}/keep.txt').readAsStringSync(), 'aman');
   });
 
   test('mengekspor 3 stiker, tray.png, dan metadata.json', () async {
@@ -89,9 +127,9 @@ void main() {
 
     expect(res.stickerCount, 3);
     final dir = Directory(res.stagingPath);
-    final meta =
-        jsonDecode(File('${dir.path}/metadata.json').readAsStringSync())
-            as Map<String, dynamic>;
+    final meta = jsonDecode(
+      File('${dir.path}/metadata.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
     final pack = (meta['sticker_packs'] as List).first as Map<String, dynamic>;
     expect(pack['identifier'], 'pack-1');
     expect(pack['publisher'], 'Author Test');

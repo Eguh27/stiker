@@ -58,6 +58,15 @@ class DriftQueueRepository implements QueueRepository {
   }
 
   @override
+  Future<int> deleteItems(Iterable<String> ids) {
+    final Set<String> idSet = ids.toSet();
+    if (idSet.isEmpty) return Future<int>.value(0);
+    return (_database.delete(
+      _database.importQueue,
+    )..where((row) => row.id.isIn(idSet))).go();
+  }
+
+  @override
   Future<void> setAutoRmbg(bool enabled) {
     return _settings.setBool(autoRmbgSettingKey, enabled);
   }

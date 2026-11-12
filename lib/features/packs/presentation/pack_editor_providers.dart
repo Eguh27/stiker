@@ -19,6 +19,10 @@ class PackEditorNotifier extends Notifier<PackEditorState> {
 
   final String? _packId;
 
+  /// Id hasil `createPack` setelah Simpan/publish pack baru, agar simpan
+  /// berikutnya memperbarui pack yang sama alih-alih membuat duplikat.
+  String? _resolvedPackId;
+
   @override
   PackEditorState build() {
     Future<void>.microtask(_load);
@@ -135,17 +139,20 @@ class PackEditorNotifier extends Notifier<PackEditorState> {
     if (!current.isReady || current.isSaving) return false;
     state = current.copyWith(isSaving: true);
     final PackEditorRepository repository = ref.read(packRepositoryProvider);
+    final String? existingId = _resolvedPackId ?? _packId;
     try {
-      if (_packId == null) {
-        await repository.createPack(
+      if (existingId == null) {
+        final PackDetail created = await repository.createPack(
           name: _saveName(current.pack!),
           author: _saveAuthor(current.pack!),
           stickers: current.stickers,
           emojiTags: current.emojiTags,
         );
+        _resolvedPackId = created.pack.id;
+        state = state.copyWith(pack: created.pack);
       } else {
         await repository.updatePack(
-          packId: _packId,
+          packId: existingId,
           name: _saveName(current.pack!),
           author: _saveAuthor(current.pack!),
           stickers: current.stickers,

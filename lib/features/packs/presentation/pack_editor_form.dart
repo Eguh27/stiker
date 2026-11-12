@@ -25,6 +25,7 @@ class PackEditorForm extends StatelessWidget {
     required this.authorController,
     required this.onAdd,
     required this.onReorder,
+    required this.onRemove,
     required this.onToggleEmoji,
     required this.onPublish,
   });
@@ -36,6 +37,7 @@ class PackEditorForm extends StatelessWidget {
   final TextEditingController authorController;
   final VoidCallback onAdd;
   final void Function(int oldIndex, int newIndex) onReorder;
+  final ValueChanged<int> onRemove;
   final ValueChanged<String> onToggleEmoji;
   final VoidCallback onPublish;
 
@@ -114,6 +116,7 @@ class PackEditorForm extends StatelessWidget {
       canAdd: state.canAddSticker,
       onAdd: onAdd,
       onReorder: onReorder,
+      onRemove: onRemove,
     );
   }
 }

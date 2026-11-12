@@ -90,6 +90,8 @@ class PackEditor {
       author: trimmedAuthor,
       trayIconPath: trimmedTray,
       stickerIds: stickerIds,
+      // Edit pack boleh menjadi draft di bawah 3; batas 3 hanya untuk publish.
+      minStickerCount: 0,
     );
     if (emojis != null) {
       PackEmojis.validate(emojis);

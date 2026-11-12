@@ -50,4 +50,7 @@ abstract class PackEditorRepository implements PackRepository {
     required String packId,
     required List<String> stickerIds,
   });
+
+  /// Hapus pack beserta seluruh baris `pack_stickers`. Stiker library tetap.
+  Future<void> deletePack(String packId);
 }

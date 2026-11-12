@@ -35,6 +35,23 @@ void main() {
     expect(updated.version, '1');
   });
 
+  test('update mengizinkan draft di bawah 3 stiker', () async {
+    final PackDetails pack = await create(stickerIds: workspace.stickerIds(4));
+    final List<String> draft = workspace.stickerIds(3).sublist(0, 2);
+
+    final PackDetails updated = await workspace.repository.updatePack(
+      id: pack.id,
+      name: pack.name,
+      author: pack.author,
+      trayIconPath: pack.trayIconPath,
+      stickerIds: draft,
+    );
+
+    expect(updated.stickerCount, 2);
+    final PackDetails stored = await workspace.repository.fetchPack(pack.id);
+    expect(stored.stickerIds, draft);
+  });
+
   test('update menaikkan versi tepat sekali per perubahan konten', () async {
     final PackDetails pack = await create();
 

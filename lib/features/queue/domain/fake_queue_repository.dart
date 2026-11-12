@@ -17,6 +17,9 @@ class FakeQueueRepository implements QueueRepository {
   final Object? errorToThrow;
   bool autoRmbg;
 
+  /// Akses test: isi antrean terkini tanpa menunggu latensi mock.
+  List<QueueItem> get items => List.unmodifiable(_items);
+
   static const List<QueueItem> localItems = [
     QueueItem(
       id: 'q1',
@@ -74,6 +77,14 @@ class FakeQueueRepository implements QueueRepository {
         else
           item,
     ];
+  }
+
+  @override
+  Future<int> deleteItems(Iterable<String> ids) async {
+    final Set<String> idSet = ids.toSet();
+    final int before = _items.length;
+    _items = _items.where((item) => !idSet.contains(item.id)).toList();
+    return before - _items.length;
   }
 
   @override

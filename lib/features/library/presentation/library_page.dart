@@ -9,6 +9,7 @@ import '../../data/import/foreground_import_runner.dart';
 import '../../editor/presentation/image_editor_page.dart';
 import '../../packs/domain/sticker_pack.dart';
 import '../../packs/presentation/pack_card.dart';
+import '../../packs/presentation/pack_delete_action.dart';
 import '../../packs/presentation/pack_editor_page.dart';
 import '../../packs/presentation/pack_providers.dart';
 import '../domain/sticker.dart';
@@ -129,6 +130,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 PackCard(
                   pack: pack,
                   onTap: () => _openPackEditor(packId: pack.id),
+                  onDelete: () => deletePack(context, ref, pack),
                 ),
               const SizedBox(height: AppSpacing.s4),
             ],

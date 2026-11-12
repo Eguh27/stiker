@@ -6,6 +6,7 @@ abstract class QueueRepository {
   Future<List<QueueItem>> fetchQueue();
   Stream<List<QueueItem>> watchQueue();
   Future<void> retryItem(String id);
+  Future<int> deleteItems(Iterable<String> ids);
   Future<bool> fetchAutoRmbg();
   Future<void> setAutoRmbg(bool enabled);
 }

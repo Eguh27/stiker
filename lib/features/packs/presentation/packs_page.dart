@@ -7,6 +7,7 @@ import '../../../core/widgets/state_panels.dart';
 import '../../../core/widgets/top_bar.dart';
 import '../domain/sticker_pack.dart';
 import 'pack_card.dart';
+import 'pack_delete_action.dart';
 import 'pack_editor_page.dart';
 import 'pack_providers.dart';
 
@@ -86,6 +87,7 @@ class PacksPage extends ConsumerWidget {
             PackCard(
               pack: pack,
               onTap: () => _openEditor(context, packId: pack.id),
+              onDelete: () => deletePack(context, ref, pack),
             ),
         ];
       },

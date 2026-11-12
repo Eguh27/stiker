@@ -14,12 +14,14 @@ class PackEditGrid extends StatelessWidget {
     this.canAdd = true,
     this.onAdd,
     this.onReorder,
+    this.onRemove,
   });
 
   final List<Sticker> stickers;
   final bool canAdd;
   final VoidCallback? onAdd;
   final void Function(int oldIndex, int newIndex)? onReorder;
+  final ValueChanged<int>? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +40,7 @@ class PackEditGrid extends StatelessWidget {
             sticker: stickers[index],
             index: index,
             onReorder: onReorder,
+            onRemove: onRemove == null ? null : () => onRemove!(index),
           ),
         PackAddStickerCell(canAdd: canAdd, onAdd: onAdd),
       ],

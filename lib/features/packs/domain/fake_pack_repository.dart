@@ -163,6 +163,18 @@ class FakePackRepository implements PackEditorRepository {
   Sticker _stickerById(String id, List<Sticker> pool) =>
       pool.firstWhere((Sticker sticker) => sticker.id == id);
 
+  @override
+  Future<void> deletePack(String packId) async {
+    await _throwIfUnavailable();
+    final int index = _packs.indexWhere(
+      (StickerPack pack) => pack.id == packId,
+    );
+    if (index < 0) throw StateError('Pack $packId tidak ada');
+    _packs.removeAt(index);
+    _details.remove(packId);
+    _emojis.remove(packId);
+  }
+
   void _syncCount(String packId) {
     final int index = _packs.indexWhere(
       (StickerPack pack) => pack.id == packId,

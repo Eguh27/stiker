@@ -147,4 +147,47 @@ void main() {
 
     await pumpSettled(tester);
   });
+
+  testWidgets('hapus stiker dari pack hanya mengubah draft', (tester) async {
+    final FakePackRepository fake = FakePackRepository();
+    await pumpEditor(tester, packId: 'p1', repository: fake);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('pack-remove-p1-s1')));
+    await tester.pumpAndSettle();
+
+    final PackEditorState state = editorContainerOf(tester)
+        .read(packEditorProvider('p1'));
+    expect(state.stickers, hasLength(17));
+    expect(state.stickers.map((Sticker s) => s.id), isNot(contains('p1-s1')));
+    expect(
+      fake.packs.firstWhere((StickerPack p) => p.id == 'p1').stickerCount,
+      18,
+    );
+  });
+
+  testWidgets('hapus pack dari kartu meminta konfirmasi', (tester) async {
+    final FakePackRepository fake = FakePackRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [packRepositoryProvider.overrideWithValue(fake)],
+        child: const MaterialApp(home: PacksPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('pack-delete-p1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Hapus pack?'), findsOneWidget);
+    expect(
+      find.textContaining('Stiker aslinya tetap ada di Library'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Hapus'));
+    await tester.pumpAndSettle();
+
+    expect(fake.packs.map((StickerPack p) => p.id), isNot(contains('p1')));
+    expect(find.text('Daily Mood'), findsNothing);
+  });
 }

@@ -16,11 +16,13 @@ class PackStickerCell extends StatelessWidget {
     required this.sticker,
     required this.index,
     this.onReorder,
+    this.onRemove,
   });
 
   final Sticker sticker;
   final int index;
   final void Function(int oldIndex, int newIndex)? onReorder;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +79,29 @@ class PackStickerCell extends StatelessWidget {
                 ),
               ),
             ),
+            if (onRemove != null)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IconButton(
+                  key: ValueKey<String>('pack-remove-${sticker.id}'),
+                  onPressed: onRemove,
+                  tooltip: 'Hapus dari pack',
+                  iconSize: 18,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 44,
+                    height: 44,
+                  ),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: colors.text2,
+                    shadows: const [
+                      Shadow(color: Colors.black26, blurRadius: 4),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       );

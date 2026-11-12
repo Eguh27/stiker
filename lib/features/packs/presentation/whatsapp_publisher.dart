@@ -17,6 +17,16 @@ class WhatsAppPublisher {
     final messenger = ScaffoldMessenger.of(context);
     final channel = ref.read(whatsAppChannelProvider);
     final exporter = ref.read(whatsAppStagingExporterProvider);
+    final pack = state.pack!;
+
+    if (pack.id.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Simpan pack sebelum mengirim ke WhatsApp.'),
+        ),
+      );
+      return;
+    }
 
     final isWa = await channel.isWhatsAppInstalled();
     final isWaBusiness = await channel.isWhatsAppInstalled(business: true);
@@ -34,17 +44,17 @@ class WhatsAppPublisher {
       final stagingDir = await channel.getStagingDirectory();
       await exporter.exportPack(
         stagingBaseDir: stagingDir,
-        identifier: state.pack!.id,
-        name: state.pack!.name,
-        author: state.pack!.author,
+        identifier: pack.id,
+        name: pack.name,
+        author: pack.author,
         stickerPaths: [for (final s in state.stickers) s.filePath ?? ''],
         emojis: state.emojiTags,
         trayIconPath: state.stickers.firstOrNull?.filePath,
       );
 
       final added = await channel.addStickerPack(
-        identifier: state.pack!.id,
-        name: state.pack!.name,
+        identifier: pack.id,
+        name: pack.name,
         isBusiness: !isWa && isWaBusiness,
       );
 

@@ -8,6 +8,7 @@ import '../../library/presentation/sticker_providers.dart';
 import '../domain/queue_item.dart';
 import 'auto_rmbg_toggle.dart';
 import 'privacy_note.dart';
+import 'queue_actions.dart';
 import 'queue_card.dart';
 import 'queue_providers.dart';
 import 'queue_tabs.dart';
@@ -116,6 +117,12 @@ class _QueuePageState extends ConsumerState<QueuePage> {
                 ref.invalidate(queueStreamProvider);
                 _processQueue();
               },
+              onTap: isDoneItem(item)
+                  ? () => openQueueItemEditor(context, item)
+                  : null,
+              onDelete: isDoneItem(item)
+                  ? () => deleteQueueHistory(context, ref, item)
+                  : null,
             ),
         ];
       },

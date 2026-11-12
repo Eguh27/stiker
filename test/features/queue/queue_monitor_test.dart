@@ -4,8 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sticker_studio/core/theme/app_theme.dart';
 import 'package:sticker_studio/core/widgets/state_panels.dart';
 import 'package:sticker_studio/features/queue/domain/fake_queue_repository.dart';
+import 'package:sticker_studio/features/queue/domain/queue_item.dart';
 import 'package:sticker_studio/features/queue/domain/queue_repository.dart';
+import 'package:sticker_studio/features/editor/presentation/image_editor_page.dart';
 import 'package:sticker_studio/features/queue/presentation/queue_page.dart';
+import 'package:sticker_studio/features/queue/presentation/queue_card.dart';
 import 'package:sticker_studio/features/queue/presentation/queue_providers.dart';
 
 Future<void> _pump(WidgetTester tester, QueueRepository repository) {
@@ -74,5 +77,44 @@ void main() {
     await tester.tap(toggle);
     await tester.pumpAndSettle();
     expect(repository.autoRmbg, isFalse);
+  });
+
+  testWidgets('hapus riwayat only removes import_queue entry', (tester) async {
+    final FakeQueueRepository repository = FakeQueueRepository();
+    await _pump(tester, repository);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Baru Diimpor 1'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('queue-delete-q4')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Hapus riwayat?'), findsOneWidget);
+
+    await tester.tap(find.text('Hapus'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final List<QueueItem> remaining = repository.items;
+    expect(remaining.map((QueueItem item) => item.id), isNot(contains('q4')));
+    expect(find.text('Riwayat "weekend-pack.zip" dihapus'), findsOneWidget);
+  });
+
+  testWidgets('tap riwayat membuka editor file tersebut', (tester) async {
+    await _pump(tester, FakeQueueRepository());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Baru Diimpor 1'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(QueueCard));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final ImageEditorPage page = tester.widget<ImageEditorPage>(
+      find.byType(ImageEditorPage),
+    );
+    expect(page.stickerId, 'q4');
+    expect(find.text('Edit stiker'), findsOneWidget);
   });
 }

@@ -52,9 +52,30 @@ class _PackEditorPageState extends ConsumerState<PackEditorPage> {
 
   void _openPacksPage() => Navigator.of(context).maybePop();
 
-  void _publish() {
-    final state = ref.read(packEditorProvider(widget.packId));
-    WhatsAppPublisher.publish(context: context, ref: ref, state: state);
+  Future<void> _publish() async {
+    PackEditorState state = ref.read(packEditorProvider(widget.packId));
+    if (!state.isReady || !state.isPublishable) return;
+
+    // Pack baru belum punya id; simpan dulu agar identifier staging valid dan
+    // publish tidak pernah memakai id kosong.
+    if (state.pack!.id.isEmpty) {
+      final messenger = ScaffoldMessenger.of(context);
+      final bool saved = await ref
+          .read(packEditorProvider(widget.packId).notifier)
+          .save();
+      if (!saved) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Gagal menyimpan pack sebelum mengirim ke WhatsApp'),
+          ),
+        );
+        return;
+      }
+      if (!mounted) return;
+      state = ref.read(packEditorProvider(widget.packId));
+    }
+
+    await WhatsAppPublisher.publish(context: context, ref: ref, state: state);
   }
 
   Future<void> _save() async {
@@ -135,6 +156,7 @@ class _PackEditorPageState extends ConsumerState<PackEditorPage> {
           authorController: _authorController,
           onAdd: _openStickerPicker,
           onReorder: notifier.moveSticker,
+          onRemove: notifier.removeSticker,
           onToggleEmoji: notifier.toggleEmojiTag,
           onPublish: _publish,
         ),

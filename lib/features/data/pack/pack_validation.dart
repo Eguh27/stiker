@@ -32,11 +32,12 @@ void validatePackInput({
   required String author,
   required String trayIconPath,
   required List<String> stickerIds,
+  int minStickerCount = minPackStickerCount,
 }) {
   validatePackText('Nama', name);
   validatePackText('Pembuat', author);
   validatePackTrayIconPath(trayIconPath);
-  validatePackStickerIds(stickerIds);
+  validatePackStickerIds(stickerIds, minCount: minStickerCount);
 }
 
 void validatePackTrayIconPath(String path) {
@@ -45,11 +46,14 @@ void validatePackTrayIconPath(String path) {
   }
 }
 
-void validatePackStickerIds(List<String> stickerIds) {
+void validatePackStickerIds(
+  List<String> stickerIds, {
+  int minCount = minPackStickerCount,
+}) {
   final int count = stickerIds.length;
-  if (count < minPackStickerCount) {
+  if (count < minCount) {
     throw PackValidationException(
-      'Pack minimal $minPackStickerCount stiker (saat ini $count).',
+      'Pack minimal $minCount stiker (saat ini $count).',
     );
   }
   if (count > maxPackStickerCount) {
